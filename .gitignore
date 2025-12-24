@@ -1,0 +1,38 @@
+# Node / Next / React
+node_modules/
+.pnpm-store/
+.npm/
+.next/
+.turbo/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# Rust / Cargo
+/target/
+**/target/
+**/wasm/target/
+**/wasm32-unknown-unknown/
+**/wasm32v1-none/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Swap
+*.swp
+*.swo

@@ -1,0 +1,262 @@
+{
+    "buildInfo": {
+        "contractCrate": {
+            "name": "voting-app",
+            "version": "0.0.0"
+        },
+        "framework": {
+            "name": "multiversx-sc",
+            "version": "0.63.3"
+        }
+    },
+    "docs": [
+        "A decentralized voting smart contract with multiple elections and eligible voters."
+    ],
+    "name": "VotingApp",
+    "constructor": {
+        "inputs": [],
+        "outputs": []
+    },
+    "upgradeConstructor": {
+        "inputs": [],
+        "outputs": []
+    },
+    "endpoints": [
+        {
+            "name": "createElection",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "name",
+                    "type": "bytes"
+                },
+                {
+                    "name": "start_time",
+                    "type": "u64"
+                },
+                {
+                    "name": "end_time",
+                    "type": "u64"
+                },
+                {
+                    "name": "candidates",
+                    "type": "variadic<bytes>",
+                    "multi_arg": true
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "createElectionWithMerkle",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "name",
+                    "type": "bytes"
+                },
+                {
+                    "name": "start_time",
+                    "type": "u64"
+                },
+                {
+                    "name": "end_time",
+                    "type": "u64"
+                },
+                {
+                    "name": "merkle_root",
+                    "type": "bytes"
+                },
+                {
+                    "name": "candidates",
+                    "type": "variadic<bytes>",
+                    "multi_arg": true
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "addVoters",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                },
+                {
+                    "name": "voters",
+                    "type": "variadic<Address>",
+                    "multi_arg": true
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "endElection",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "forceEndElection",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "vote",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                },
+                {
+                    "name": "candidate",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "voteWithMerkleProof",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "_election_id",
+                    "type": "u64"
+                },
+                {
+                    "name": "_candidate",
+                    "type": "bytes"
+                },
+                {
+                    "name": "_merkle_proof",
+                    "type": "variadic<bytes>",
+                    "multi_arg": true
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "verifyMerkleProof",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "voter",
+                    "type": "Address"
+                },
+                {
+                    "name": "merkle_root",
+                    "type": "bytes"
+                },
+                {
+                    "name": "proof",
+                    "type": "variadic<bytes>"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "bool"
+                }
+            ]
+        },
+        {
+            "name": "getAllElections",
+            "mutability": "readonly",
+            "inputs": [],
+            "outputs": [
+                {
+                    "type": "variadic<ElectionInfo>",
+                    "multi_result": true
+                }
+            ]
+        },
+        {
+            "name": "getElectionResults",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "variadic<tuple<bytes,u64>>",
+                    "multi_result": true
+                }
+            ]
+        },
+        {
+            "docs": [
+                "Returns only the candidate names for a given election.",
+                "This avoids returning vote counts when the frontend only needs names."
+            ],
+            "name": "getElectionCandidates",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "variadic<bytes>",
+                    "multi_result": true
+                }
+            ]
+        }
+    ],
+    "esdtAttributes": [],
+    "hasCallback": false,
+    "types": {
+        "ElectionInfo": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "id",
+                    "type": "u64"
+                },
+                {
+                    "name": "name",
+                    "type": "bytes"
+                },
+                {
+                    "name": "start_time",
+                    "type": "u64"
+                },
+                {
+                    "name": "end_time",
+                    "type": "u64"
+                },
+                {
+                    "name": "is_finalized",
+                    "type": "bool"
+                },
+                {
+                    "name": "merkle_root",
+                    "type": "Option<bytes>"
+                }
+            ]
+        }
+    }
+}
