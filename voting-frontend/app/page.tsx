@@ -7,6 +7,7 @@ import { useGetNetworkConfig } from '@multiversx/sdk-dapp/out/react/network/useG
 import { UnlockPanelManager } from '@multiversx/sdk-dapp/out/managers/UnlockPanelManager';
 import { getAccountProvider } from '@multiversx/sdk-dapp/out/providers/helpers/accountProvider';
 import { useGetAllElections } from '@/hooks/useElections';
+import { useIsOrganizer } from '@/hooks/useIsOrganizer';
 import { ElectionList } from '@/components/ElectionList';
 import { CreateElectionForm } from '@/components/CreateElectionForm';
 import { VoteModal } from '@/components/VoteModal';
@@ -19,6 +20,7 @@ export default function Home() {
   const { address } = useGetAccountInfo();
   const { network } = useGetNetworkConfig();
   const { elections, loading, refetch } = useGetAllElections();
+  const { isOrganizer, loading: organizerLoading } = useIsOrganizer();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedElectionForVoting, setSelectedElectionForVoting] = useState<Election | null>(null);
@@ -31,7 +33,8 @@ export default function Home() {
     const manager = UnlockPanelManager.init({
       loginHandler: () => {
         console.log('Login successful');
-        refetch(); // Refresh elections after login
+        // Refetch elections to update the UI with the new address
+        refetch();
       },
       onClose: () => {
         console.log('Unlock panel closed');
@@ -42,7 +45,7 @@ export default function Home() {
     return () => {
       // Cleanup on unmount
     };
-  }, []);
+  }, [refetch]);
 
   const handleLogin = () => {
     if (unlockPanelManager) {
@@ -152,27 +155,27 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🗳️ Decentralized Voting</h1>
+            <div className="animate-fade-in">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">🗳️ Decentralized Voting</h1>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Secure, transparent blockchain voting</p>
             </div>
             
             {isLoggedIn && (
-              <div className="flex items-center gap-4">
-                <div className="text-right hidden sm:block">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Connected as</p>
-                  <p className="font-mono text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                    {address.slice(0, 10)}...{address.slice(-8)}
+              <div className="flex items-center gap-4 animate-slide-in">
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Connected</p>
+                  <p className="font-mono text-xs bg-gradient-to-r from-blue-100 to-purple-100 dark:from-gray-700 dark:to-gray-600 px-3 py-2 rounded-lg max-w-xs overflow-x-auto border border-blue-200 dark:border-gray-600">
+                    {address}
                   </p>
                 </div>
                 <button 
                   onClick={handleLogout}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all shadow-md hover:shadow-lg flex-shrink-0 font-medium"
                 >
                   Logout
                 </button>
@@ -185,20 +188,20 @@ export default function Home() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!isLoggedIn ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 max-w-md w-full">
-              <div className="text-center mb-6">
-                <div className="text-6xl mb-4">🔐</div>
-                <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Connect your MultiversX wallet to participate in elections
+          <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-10 max-w-md w-full border border-gray-200 dark:border-gray-700 smooth-shadow">
+              <div className="text-center mb-8">
+                <div className="text-7xl mb-6 animate-pulse">🔐</div>
+                <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Connect Your Wallet</h2>
+                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Connect your MultiversX wallet to participate in secure blockchain elections
                 </p>
               </div>
               
               <div className="space-y-3">
                 <button
                   onClick={handleLogin}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all font-medium shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
                 >
                   Connect Wallet
                 </button>
@@ -208,24 +211,35 @@ export default function Home() {
         ) : (
           <>
             {/* Action Bar */}
-            <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-slide-in">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">All Elections</h2>
-                <p className="text-gray-600 dark:text-gray-400">Browse and participate in elections</p>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">All Elections</h2>
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-600 dark:text-gray-400">
+                    {isOrganizer ? '👑 Manage your elections' : '🗳️ Browse and participate in elections'}
+                  </p>
+                  {organizerLoading && (
+                    <span className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                      <span className="animate-pulse">⏳</span> Checking role...
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => refetch()}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  className="px-5 py-2.5 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all shadow-md hover:shadow-lg font-medium flex items-center gap-2"
                 >
                   🔄 Refresh
                 </button>
-                <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                >
-                  + Create Election
-                </button>
+                {isOrganizer && !organizerLoading && (
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-medium shadow-md hover:shadow-lg transform hover:scale-[1.02]"
+                  >
+                    + Create Election
+                  </button>
+                )}
               </div>
             </div>
 
@@ -278,11 +292,16 @@ export default function Home() {
       )}
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-            Built on MultiversX Blockchain • Secure & Transparent Voting
-          </p>
+      <footer className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+              🔒 Built on MultiversX Blockchain
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-500">
+              Secure • Transparent • Decentralized
+            </p>
+          </div>
         </div>
       </footer>
     </div>

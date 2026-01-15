@@ -1,5 +1,5 @@
 
-export const contractAddress = 'erd1qqqqqqqqqqqqqpgqanw79wh7zk4jv5ll2enhtkhdlu2la3e4v8msvgkdkz';
+export const contractAddress = 'erd1qqqqqqqqqqqqqpgqv60pvzud99s5lx3vhpsl6e2n5yvzjjzjv8ms9vkt6m';
 
 export const dAppName = 'Voting App';
 

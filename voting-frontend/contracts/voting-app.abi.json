@@ -9,9 +9,6 @@
             "version": "0.63.3"
         }
     },
-    "docs": [
-        "A decentralized voting smart contract with multiple elections and eligible voters."
-    ],
     "name": "VotingApp",
     "constructor": {
         "inputs": [],
@@ -186,6 +183,16 @@
                 {
                     "type": "variadic<ElectionInfo>",
                     "multi_result": true
+                }
+            ]
+        },
+        {
+            "name": "isOrganizer",
+            "mutability": "readonly",
+            "inputs": [],
+            "outputs": [
+                {
+                    "type": "bool"
                 }
             ]
         },

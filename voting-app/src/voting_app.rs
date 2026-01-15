@@ -12,17 +12,16 @@ pub struct ElectionInfo<M: ManagedTypeApi> {
     pub start_time: u64,
     pub end_time: u64,
     pub is_finalized: bool,
-    pub merkle_root: Option<ManagedBuffer<M>>,  // For Merkle tree voting
+    pub merkle_root: Option<ManagedBuffer<M>>,
 }
 
 #[type_abi]
 #[derive(TopEncode, TopDecode, NestedEncode, NestedDecode)]
 pub enum VotingMode {
-    DirectVoting,      // Traditional: all voters stored
-    MerkleProof,       // Scalable: voters provide Merkle proof
+    DirectVoting,
+    MerkleProof,
 }
 
-/// A decentralized voting smart contract with multiple elections and eligible voters.
 #[multiversx_sc::contract]
 pub trait VotingApp {
     #[init]
@@ -111,9 +110,7 @@ pub trait VotingApp {
     fn add_voters(&self, election_id: u64, voters: MultiValueEncoded<ManagedAddress>) {
         self.require_organizer();
         require!(!self.election_info(election_id).is_empty(), "Election does not exist");
-        
-        // Allow adding voters anytime before it ends? Or only before start?
-        // Usually before start or during active is fine.
+
         let info = self.election_info(election_id).get();
         require!(!info.is_finalized, "Election ended");
 
@@ -136,7 +133,6 @@ pub trait VotingApp {
         info.is_finalized = true;
         self.election_info(election_id).set(info);
 
-        // Calculate and store results
         let mut candidates_vec = ManagedVec::new();
         let mut counts_vec = ManagedVec::new();
         for candidate in self.candidates(election_id).iter() {
@@ -155,13 +151,10 @@ pub trait VotingApp {
         
         let mut info = self.election_info(election_id).get();
         require!(!info.is_finalized, "Election already finalized");
-        
-        // No time check - allow ending at any time for testing
 
         info.is_finalized = true;
         self.election_info(election_id).set(info);
 
-        // Calculate and store results
         let mut candidates_vec = ManagedVec::new();
         let mut counts_vec = ManagedVec::new();
         for candidate in self.candidates(election_id).iter() {
@@ -270,6 +263,12 @@ pub trait VotingApp {
             result.push(info);
         }
         result
+    }
+
+    #[view(isOrganizer)]
+    fn is_organizer(&self) -> bool {
+        let caller = self.blockchain().get_caller();
+        caller == self.organizer().get()
     }
 
     #[view(getElectionResults)]

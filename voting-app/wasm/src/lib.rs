@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           11
+// Endpoints:                           12
 // Async Callback (empty):               1
-// Total number of exported functions:  14
+// Total number of exported functions:  15
 
 #![no_std]
 
@@ -29,6 +29,7 @@ multiversx_sc_wasm_adapter::endpoints! {
         voteWithMerkleProof => vote_with_merkle_proof
         verifyMerkleProof => verify_merkle_proof
         getAllElections => get_all_elections
+        isOrganizer => is_organizer
         getElectionResults => get_election_results
         getElectionCandidates => get_election_candidates
     )
