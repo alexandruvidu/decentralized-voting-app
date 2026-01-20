@@ -13,19 +13,23 @@ import { CreateElectionForm } from '@/components/CreateElectionForm';
 import { VoteModal } from '@/components/VoteModal';
 import { ResultsModal } from '@/components/ResultsModal';
 import { AddVotersModal } from '@/components/AddVotersModal';
+import { EndElectionModal } from '@/components/EndElectionModal';
+import { ThresholdDecryptModal } from '@/components/ThresholdDecryptModal';
 import { Election } from '@/types/election';
 
 export default function Home() {
   const { isLoggedIn } = useGetLoginInfo();
   const { address } = useGetAccountInfo();
   const { network } = useGetNetworkConfig();
-  const { elections, loading, refetch } = useGetAllElections();
+  const { elections, loading, refetch, markEnded } = useGetAllElections();
   const { isOrganizer, loading: organizerLoading } = useIsOrganizer();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedElectionForVoting, setSelectedElectionForVoting] = useState<Election | null>(null);
   const [selectedElectionForResults, setSelectedElectionForResults] = useState<Election | null>(null);
   const [selectedElectionForVoters, setSelectedElectionForVoters] = useState<Election | null>(null);
+  const [selectedElectionForEnd, setSelectedElectionForEnd] = useState<Election | null>(null);
+  const [selectedElectionForPublish, setSelectedElectionForPublish] = useState<number | null>(null);
   const [unlockPanelManager, setUnlockPanelManager] = useState<UnlockPanelManager | null>(null);
 
   useEffect(() => {
@@ -233,12 +237,20 @@ export default function Home() {
                   🔄 Refresh
                 </button>
                 {isOrganizer && !organizerLoading && (
-                  <button
-                    onClick={() => setShowCreateForm(true)}
-                    className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-medium shadow-md hover:shadow-lg transform hover:scale-[1.02]"
-                  >
-                    + Create Election
-                  </button>
+                  <>
+                    <a
+                      href="/dkg"
+                      className="px-6 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all font-medium shadow-md hover:shadow-lg transform hover:scale-[1.02] flex items-center gap-2"
+                    >
+                      🔐 DKG Keys
+                    </a>
+                    <button
+                      onClick={() => setShowCreateForm(true)}
+                      className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-medium shadow-md hover:shadow-lg transform hover:scale-[1.02]"
+                    >
+                      + Create Election
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -250,8 +262,8 @@ export default function Home() {
               onVote={(election) => setSelectedElectionForVoting(election)}
               onViewResults={(election) => setSelectedElectionForResults(election)}
               onAddVoters={(election) => setSelectedElectionForVoters(election)}
-              onForceEnd={handleForceEnd}
-              onFinalize={handleFinalize}
+              onEndElection={(election) => setSelectedElectionForEnd(election)}
+              onPublishResults={(electionId) => setSelectedElectionForPublish(electionId)}
             />
           </>
         )}
@@ -287,6 +299,37 @@ export default function Home() {
           onClose={() => setSelectedElectionForVoters(null)}
           onSuccess={() => {
             setSelectedElectionForVoters(null);
+          }}
+        />
+      )}
+
+      {selectedElectionForEnd && (
+        <EndElectionModal
+          election={selectedElectionForEnd}
+          onClose={() => setSelectedElectionForEnd(null)}
+          onSuccess={() => {
+            if (selectedElectionForEnd) {
+              markEnded(selectedElectionForEnd.id);
+            }
+            setSelectedElectionForEnd(null);
+            // Wait longer for indexer to catch up before refetch (3 seconds)
+            setTimeout(() => {
+              refetch();
+            }, 3000);
+          }}
+        />
+      )}
+
+      {selectedElectionForPublish !== null && (
+        <ThresholdDecryptModal
+          electionId={selectedElectionForPublish}
+          candidates={
+            elections.find(e => e.id === selectedElectionForPublish)?.candidates || []
+          }
+          onClose={() => setSelectedElectionForPublish(null)}
+          onSuccess={() => {
+            refetch();
+            setSelectedElectionForPublish(null);
           }}
         />
       )}

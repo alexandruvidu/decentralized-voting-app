@@ -8,11 +8,11 @@ interface ElectionCardProps {
   onVote: (election: Election) => void;
   onViewResults: (election: Election) => void;
   onAddVoters?: (election: Election) => void;
-  onForceEnd?: (election: Election) => void;
-  onFinalize?: (election: Election) => void;
+  onEndElection?: (election: Election) => void;
+  onPublishResults?: (electionId: number) => void;
 }
 
-export function ElectionCard({ election, onVote, onViewResults, onAddVoters, onForceEnd, onFinalize }: ElectionCardProps) {
+export function ElectionCard({ election, onVote, onViewResults, onAddVoters, onEndElection, onPublishResults }: ElectionCardProps) {
   const status = getElectionStatus(election);
   const { isOrganizer, loading } = useIsOrganizer();
   
@@ -66,6 +66,17 @@ export function ElectionCard({ election, onVote, onViewResults, onAddVoters, onF
               <span className="inline-flex items-center gap-1 text-xs bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-full font-semibold border border-blue-200 dark:border-blue-700">
                 👤 Voter
               </span>
+            )}
+            {!loading && isOrganizer === true && (
+              election.has_encryption_key ? (
+                <span className="inline-flex items-center gap-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-3 py-1.5 rounded-full font-semibold border border-green-200 dark:border-green-700" title="Encryption key stored on-chain">
+                  🔐 Key set
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 px-3 py-1.5 rounded-full font-semibold border border-yellow-200 dark:border-yellow-700" title="No encryption key stored yet">
+                  ⚠️ No key
+                </span>
+              )
             )}
           </div>
         </div>
@@ -122,23 +133,23 @@ export function ElectionCard({ election, onVote, onViewResults, onAddVoters, onF
                     👥 Add Voters
                   </button>
                 )}
-                {onForceEnd && (
+                {onEndElection && (
                   <button
-                    onClick={() => onForceEnd(election)}
+                    onClick={() => onEndElection(election)}
                     className="px-5 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl hover:from-red-700 hover:to-red-800 transition-all shadow-md hover:shadow-lg font-medium"
-                    title="Force end election (testing)"
+                    title="End election and retrieve votes for decryption"
                   >
-                    🛑 Force End
+                    🛑 End Election
                   </button>
                 )}
               </>
             )}
-            {status === ElectionStatus.ENDED && onFinalize && (
+            {status === ElectionStatus.ENDED && onPublishResults && (
               <button
-                onClick={() => onFinalize(election)}
+                onClick={() => onPublishResults(election.id)}
                 className="flex-1 px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg font-medium"
               >
-                ✅ Finalize Results
+                📊 Publish Results
               </button>
             )}
             {status === ElectionStatus.FINALIZED && (

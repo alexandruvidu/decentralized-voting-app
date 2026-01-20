@@ -1,4 +1,5 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
+import webpack from 'webpack';
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['@multiversx/sdk-core'],
@@ -13,6 +14,18 @@ const nextConfig: NextConfig = {
         crypto: false,
       };
     }
+    // Add buffer polyfill
+    config.resolve.fallback = {
+      ...(config.resolve.fallback || {}),
+      buffer: require.resolve('buffer/')
+    };
+
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.ProvidePlugin({
+        Buffer: ['buffer', 'Buffer']
+      })
+    );
     
     // Handle WebAssembly
     config.experiments = {
@@ -22,6 +35,18 @@ const nextConfig: NextConfig = {
     };
     
     return config;
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/dkg-api/:path*',
+        destination: 'http://localhost:3003/:path*',
+      },
+      {
+        source: '/crypto-api/:path*',
+        destination: 'http://localhost:3005/:path*',
+      },
+    ];
   },
 };
 

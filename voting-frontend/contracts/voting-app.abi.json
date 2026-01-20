@@ -36,6 +36,11 @@
                     "type": "u64"
                 },
                 {
+                    "name": "encryption_public_key",
+                    "type": "optional<bytes>",
+                    "multi_arg": true
+                },
+                {
                     "name": "candidates",
                     "type": "variadic<bytes>",
                     "multi_arg": true
@@ -45,7 +50,8 @@
                 {
                     "type": "u64"
                 }
-            ]
+            ],
+            "allow_multiple_var_args": true
         },
         {
             "name": "createElectionWithMerkle",
@@ -78,6 +84,21 @@
                     "type": "u64"
                 }
             ]
+        },
+        {
+            "name": "setEncryptionPublicKey",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                },
+                {
+                    "name": "public_key",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": []
         },
         {
             "name": "addVoters",
@@ -126,28 +147,54 @@
                     "type": "u64"
                 },
                 {
-                    "name": "candidate",
+                    "name": "encrypted_ballot",
                     "type": "bytes"
                 }
             ],
             "outputs": []
         },
         {
-            "name": "voteWithMerkleProof",
+            "docs": [
+                "Merkle-based, privacy-preserving voting (no on-chain whitelist)"
+            ],
+            "name": "voteWithMerkle",
             "mutability": "mutable",
             "inputs": [
                 {
-                    "name": "_election_id",
+                    "name": "election_id",
                     "type": "u64"
                 },
                 {
-                    "name": "_candidate",
+                    "name": "nullifier",
                     "type": "bytes"
                 },
                 {
-                    "name": "_merkle_proof",
+                    "name": "encrypted_ballot",
+                    "type": "bytes"
+                },
+                {
+                    "name": "merkle_proof",
                     "type": "variadic<bytes>",
                     "multi_arg": true
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "voteEncrypted",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                },
+                {
+                    "name": "encrypted_vote",
+                    "type": "bytes"
+                },
+                {
+                    "name": "nonce",
+                    "type": "u64"
                 }
             ],
             "outputs": []
@@ -231,6 +278,81 @@
                     "multi_result": true
                 }
             ]
+        },
+        {
+            "docs": [
+                "Returns the encryption public key for an election (for encrypted voting)"
+            ],
+            "name": "getEncryptionPublicKey",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "Option<bytes>"
+                }
+            ]
+        },
+        {
+            "docs": [
+                "Returns all eligible voters for an election (for Merkle tree proof generation)"
+            ],
+            "name": "getEligibleVoters",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "variadic<Address>",
+                    "multi_result": true
+                }
+            ]
+        },
+        {
+            "docs": [
+                "Returns all encrypted votes for an election (for threshold decryption)"
+            ],
+            "name": "getEncryptedVotes",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "variadic<bytes>",
+                    "multi_result": true
+                }
+            ]
+        },
+        {
+            "docs": [
+                "Organizer publishes decrypted results after threshold ceremony"
+            ],
+            "name": "publishResults",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "election_id",
+                    "type": "u64"
+                },
+                {
+                    "name": "candidate_counts",
+                    "type": "variadic<multi<bytes,u64>>",
+                    "multi_arg": true
+                }
+            ],
+            "outputs": []
         }
     ],
     "esdtAttributes": [],
@@ -260,7 +382,15 @@
                     "type": "bool"
                 },
                 {
+                    "name": "candidates",
+                    "type": "List<bytes>"
+                },
+                {
                     "name": "merkle_root",
+                    "type": "Option<bytes>"
+                },
+                {
+                    "name": "encryption_public_key",
                     "type": "Option<bytes>"
                 }
             ]

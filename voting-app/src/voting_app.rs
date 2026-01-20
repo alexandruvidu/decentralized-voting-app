@@ -12,7 +12,9 @@ pub struct ElectionInfo<M: ManagedTypeApi> {
     pub start_time: u64,
     pub end_time: u64,
     pub is_finalized: bool,
+    pub candidates: ManagedVec<M, ManagedBuffer<M>>,
     pub merkle_root: Option<ManagedBuffer<M>>,
+    pub encryption_public_key: Option<ManagedBuffer<M>>, // For threshold-encrypted voting
 }
 
 #[type_abi]
@@ -34,11 +36,13 @@ pub trait VotingApp {
     fn upgrade(&self) {}
 
     #[endpoint(createElection)]
+    #[allow_multiple_var_args]
     fn create_election(
         &self,
         name: ManagedBuffer,
         start_time: u64,
         end_time: u64,
+        encryption_public_key: OptionalValue<ManagedBuffer>,
         candidates: MultiValueEncoded<ManagedBuffer>,
     ) -> u64 {
         self.require_organizer();
@@ -51,19 +55,28 @@ pub trait VotingApp {
         let election_id = self.last_election_id().get() + 1;
         self.last_election_id().set(election_id);
 
+        let pub_key = match encryption_public_key {
+            OptionalValue::Some(key) => Some(key),
+            OptionalValue::None => None,
+        };
+
+        let mut candidates_vec = ManagedVec::new();
+        for candidate in candidates {
+            self.candidates(election_id).insert(candidate.clone());
+            candidates_vec.push(candidate);
+        }
+
         let election_info = ElectionInfo {
             id: election_id,
             name,
             start_time,
             end_time,
             is_finalized: false,
+            candidates: candidates_vec,
             merkle_root: None,
+            encryption_public_key: pub_key,
         };
         self.election_info(election_id).set(election_info);
-
-        for candidate in candidates {
-            self.candidates(election_id).insert(candidate);
-        }
 
         election_id
     }
@@ -77,33 +90,49 @@ pub trait VotingApp {
         merkle_root: ManagedBuffer,
         candidates: MultiValueEncoded<ManagedBuffer>,
     ) -> u64 {
-        // Temporarily disabled while testing small voter sets without Merkle proofs.
-        require!(false, "Merkle voting is disabled for now");
-        0
+        self.require_organizer();
+        require!(!name.is_empty(), "Election name cannot be empty");
+        require!(start_time < end_time, "Start time must be before end time");
+        require!(merkle_root.len() == 32, "Merkle root must be 32 bytes (keccak256)");
 
-        // self.require_organizer();
-        // require!(!name.is_empty(), "Election name cannot be empty");
-        // require!(start_time < end_time, "Start time must be before end time");
-        // require!(merkle_root.len() == 32, "Merkle root must be 32 bytes (SHA256)");
-        //
-        // let election_id = self.last_election_id().get() + 1;
-        // self.last_election_id().set(election_id);
-        //
-        // let election_info = ElectionInfo {
-        //     id: election_id,
-        //     name,
-        //     start_time,
-        //     end_time,
-        //     is_finalized: false,
-        //     merkle_root: Some(merkle_root),
-        // };
-        // self.election_info(election_id).set(election_info);
-        //
-        // for candidate in candidates {
-        //     self.candidates(election_id).insert(candidate);
-        // }
-        //
-        // election_id
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        require!(start_time >= current_timestamp, "Election start time cannot be in the past");
+
+        let election_id = self.last_election_id().get() + 1;
+        self.last_election_id().set(election_id);
+
+        let mut candidates_vec = ManagedVec::new();
+        for candidate in candidates {
+            self.candidates(election_id).insert(candidate.clone());
+            candidates_vec.push(candidate);
+        }
+
+        let election_info = ElectionInfo {
+            id: election_id,
+            name,
+            start_time,
+            end_time,
+            is_finalized: false,
+            candidates: candidates_vec,
+            merkle_root: Some(merkle_root),
+            encryption_public_key: None,
+        };
+        self.election_info(election_id).set(election_info);
+
+        election_id
+    }
+
+    #[endpoint(setEncryptionPublicKey)]
+    fn set_encryption_public_key(&self, election_id: u64, public_key: ManagedBuffer) {
+        self.require_organizer();
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+
+        let mut info = self.election_info(election_id).get();
+        require!(!info.is_finalized, "Election already finalized");
+        
+        // Store the encryption public key (binary encoded: p || g || h)
+        info.encryption_public_key = Some(public_key);
+        self.election_info(election_id).set(info);
     }
 
     #[endpoint(addVoters)]
@@ -124,50 +153,101 @@ pub trait VotingApp {
         self.require_organizer();
         require!(!self.election_info(election_id).is_empty(), "Election does not exist");
         
-        let mut info = self.election_info(election_id).get();
+        let info = self.election_info(election_id).get();
         require!(!info.is_finalized, "Election already finalized");
         
         let current_timestamp = self.blockchain().get_block_timestamp();
         require!(current_timestamp > info.end_time, "Election not yet ended");
 
-        info.is_finalized = true;
-        self.election_info(election_id).set(info);
-
-        let mut candidates_vec = ManagedVec::new();
-        let mut counts_vec = ManagedVec::new();
-        for candidate in self.candidates(election_id).iter() {
-            let count = self.vote_counts(election_id, &candidate).get();
-            candidates_vec.push(candidate);
-            counts_vec.push(count);
-        }
-        self.final_candidates(election_id).set(candidates_vec);
-        self.final_counts(election_id).set(counts_vec);
+        // Just end voting - do NOT finalize yet
+        // Finalization happens only when results are published (after threshold decryption)
+        // No state change needed - election naturally ends at end_time
     }
 
     #[endpoint(forceEndElection)]
     fn force_end_election(&self, election_id: u64) {
         self.require_organizer();
         require!(!self.election_info(election_id).is_empty(), "Election does not exist");
-        
         let mut info = self.election_info(election_id).get();
         require!(!info.is_finalized, "Election already finalized");
 
-        info.is_finalized = true;
-        self.election_info(election_id).set(info);
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        // Prevent redundant force end calls
+        require!(current_timestamp <= info.end_time, "Election already ended");
 
-        let mut candidates_vec = ManagedVec::new();
-        let mut counts_vec = ManagedVec::new();
-        for candidate in self.candidates(election_id).iter() {
-            let count = self.vote_counts(election_id, &candidate).get();
-            candidates_vec.push(candidate);
-            counts_vec.push(count);
-        }
-        self.final_candidates(election_id).set(candidates_vec);
-        self.final_counts(election_id).set(counts_vec);
+        // Force end voting immediately by updating end_time to slightly in the past
+        // This ensures publish_results (which checks > end_time) works immediately
+        info.end_time = current_timestamp.saturating_sub(1);
+        self.election_info(election_id).set(&info);
     }
 
-    #[endpoint]
-    fn vote(&self, election_id: u64, candidate: ManagedBuffer) {
+    #[endpoint(vote)]
+    fn vote(&self, election_id: u64, encrypted_ballot: ManagedBuffer) {
+        let caller = self.blockchain().get_caller();
+        
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+        
+        let info = self.election_info(election_id).get();
+        let current_timestamp = self.blockchain().get_block_timestamp();
+
+        require!(current_timestamp >= info.start_time, "Election not started");
+        require!(current_timestamp <= info.end_time, "Election ended");
+        require!(!info.is_finalized, "Election finalized");
+        require!(info.encryption_public_key.is_some(), "Election encryption keys not set");
+
+        require!(self.eligible_voters(election_id).contains(&caller), "Not eligible to vote");
+        require!(!self.has_voted(election_id).contains(&caller), "Already voted");
+
+        // Store the encrypted ballot (ElGamal ciphertext from client)
+        self.encrypted_votes(election_id).insert(encrypted_ballot);
+        
+        // Record that this voter has voted
+        self.has_voted(election_id).insert(caller);
+    }
+
+    /// Merkle-based, privacy-preserving voting (no on-chain whitelist)
+    #[endpoint(voteWithMerkle)]
+    fn vote_with_merkle(
+        &self,
+        election_id: u64,
+        nullifier: ManagedBuffer,
+        encrypted_ballot: ManagedBuffer,
+        merkle_proof: MultiValueEncoded<ManagedBuffer>,
+    ) {
+        let caller = self.blockchain().get_caller();
+
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+
+        let info = self.election_info(election_id).get();
+        let current_timestamp = self.blockchain().get_block_timestamp();
+
+        require!(current_timestamp >= info.start_time, "Election not started");
+        require!(current_timestamp <= info.end_time, "Election ended");
+        require!(!info.is_finalized, "Election finalized");
+        require!(info.encryption_public_key.is_some(), "Election encryption keys not set");
+        require!(info.merkle_root.is_some(), "Election not configured for Merkle voting");
+
+        // Nullifier prevents double voting without storing voter address
+        require!(
+            !self.used_nullifiers(election_id).contains(&nullifier),
+            "Already voted",
+        );
+
+        // Verify Merkle membership of caller
+        let leaf = self.hash_address(&caller);
+        let is_valid = self.verify_merkle_proof_leaf(
+            &leaf,
+            &info.merkle_root.unwrap(),
+            &merkle_proof,
+        );
+        require!(is_valid, "Invalid Merkle proof - not eligible");
+
+        self.used_nullifiers(election_id).insert(nullifier);
+        self.encrypted_votes(election_id).insert(encrypted_ballot);
+    }
+
+    #[endpoint(voteEncrypted)]
+    fn vote_encrypted(&self, election_id: u64, encrypted_vote: ManagedBuffer, nonce: u64) {
         let caller = self.blockchain().get_caller();
         
         require!(!self.election_info(election_id).is_empty(), "Election does not exist");
@@ -179,47 +259,17 @@ pub trait VotingApp {
         require!(current_timestamp <= info.end_time, "Election ended");
         require!(!info.is_finalized, "Election finalized");
 
-        require!(self.eligible_voters(election_id).contains(&caller), "Not eligible to vote");
-        require!(!self.has_voted(election_id).contains(&caller), "Already voted");
-        require!(self.candidates(election_id).contains(&candidate), "Invalid candidate");
-
-        self.has_voted(election_id).insert(caller);
-        self.vote_counts(election_id, &candidate).update(|count| *count += 1);
-    }
-
-    #[endpoint(voteWithMerkleProof)]
-    fn vote_with_merkle_proof(
-        &self,
-        _election_id: u64,
-        _candidate: ManagedBuffer,
-        _merkle_proof: MultiValueEncoded<ManagedBuffer>,
-    ) {
-        // Temporarily disabled while testing small voter sets without Merkle proofs.
-        require!(false, "Merkle voting is disabled for now");
-
-        // let caller = self.blockchain().get_caller();
-        // 
-        // require!(!self.election_info(election_id).is_empty(), "Election does not exist");
-        // 
-        // let info = self.election_info(election_id).get();
-        // let current_timestamp = self.blockchain().get_block_timestamp();
-        //
-        // require!(current_timestamp >= info.start_time, "Election not started");
-        // require!(current_timestamp <= info.end_time, "Election ended");
-        // require!(!info.is_finalized, "Election finalized");
-        // require!(!self.has_voted(election_id).contains(&caller), "Already voted");
-        // require!(self.candidates(election_id).contains(&candidate), "Invalid candidate");
-        //
-        // // Verify Merkle proof
-        // require!(info.merkle_root.is_some(), "This election does not use Merkle proof voting");
-        // let merkle_root = info.merkle_root.unwrap();
-        // 
-        // let is_valid = self.verify_merkle_proof(&caller, &merkle_root, &merkle_proof);
-        // require!(is_valid, "Invalid Merkle proof - not an eligible voter");
-        //
-        // // Record vote
-        // self.has_voted(election_id).insert(caller);
-        // self.vote_counts(election_id, &candidate).update(|count| *count += 1);
+        // Verify that this election has encryption enabled
+        require!(info.encryption_public_key.is_some(), "This election does not use encrypted voting");
+        
+        // Replay protection: check if nonce has been used
+        require!(!self.used_nonces(election_id).contains(&nonce), "Nonce already used - replay attack detected");
+        self.used_nonces(election_id).insert(nonce);
+        
+        // For relayer-based voting, caller is the relayer
+        // Relayer verifies eligibility and prevents duplicates off-chain
+        // Store the encrypted vote (cannot be read without threshold decryption)
+        self.encrypted_votes(election_id).insert(encrypted_vote);
     }
 
     #[view(verifyMerkleProof)]
@@ -229,28 +279,32 @@ pub trait VotingApp {
         merkle_root: &ManagedBuffer,
         proof: &MultiValueEncoded<ManagedBuffer>,
     ) -> bool {
-        // Convert voter address to ManagedBuffer
-        let voter_buffer = voter.as_managed_buffer().clone();
-        
-        // Hash the voter address - returns ManagedByteArray<M, 32>
-        let voter_hash = self.crypto().keccak256(voter_buffer);
-        
-        // Convert to ManagedBuffer for easier manipulation
-        let mut current_buffer = ManagedBuffer::new_from_bytes(&voter_hash.to_byte_array());
+        let leaf = self.hash_address(voter);
+        self.verify_merkle_proof_leaf(&leaf, merkle_root, proof)
+    }
 
-        // Apply each proof element
+    fn hash_address(&self, addr: &ManagedAddress) -> ManagedBuffer {
+        let hash = self.crypto().keccak256(addr.as_managed_buffer());
+        ManagedBuffer::new_from_bytes(&hash.to_byte_array())
+    }
+
+    fn verify_merkle_proof_leaf(
+        &self,
+        leaf: &ManagedBuffer,
+        merkle_root: &ManagedBuffer,
+        proof: &MultiValueEncoded<ManagedBuffer>,
+    ) -> bool {
+        let mut current_buffer = leaf.clone();
+
         for proof_element in proof.clone() {
-            // Create combined buffer
             let mut combined = ManagedBuffer::new();
             combined.append(&current_buffer);
             combined.append(&proof_element);
-            
-            // Hash the combined data
+
             let hash_result = self.crypto().keccak256(combined);
             current_buffer = ManagedBuffer::new_from_bytes(&hash_result.to_byte_array());
         }
 
-        // Compare final hash with stored root
         &current_buffer == merkle_root
     }
 
@@ -275,6 +329,8 @@ pub trait VotingApp {
     fn get_election_results(&self, election_id: u64) -> MultiValueEncoded<(ManagedBuffer, u64)> {
         let info = self.election_info(election_id).get();
         
+        // Only allow viewing results after election is finalized
+        // This ensures votes remain private during and immediately after election
         if info.is_finalized {
              let candidates = self.final_candidates(election_id).get();
              let counts = self.final_counts(election_id).get();
@@ -289,10 +345,10 @@ pub trait VotingApp {
              return output;
         }
 
+        // Before finalization, return empty results (votes are private)
         let mut result = MultiValueEncoded::new();
         for candidate in self.candidates(election_id).iter() {
-            let count = self.vote_counts(election_id, &candidate).get();
-            result.push((candidate, count));
+            result.push((candidate, 0));
         }
         result
     }
@@ -319,6 +375,74 @@ pub trait VotingApp {
             result.push(candidate);
         }
         result
+    }
+
+    /// Returns the encryption public key for an election (for encrypted voting)
+    #[view(getEncryptionPublicKey)]
+    fn get_encryption_public_key(&self, election_id: u64) -> Option<ManagedBuffer> {
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+        
+        let info = self.election_info(election_id).get();
+        info.encryption_public_key
+    }
+
+    /// Returns all eligible voters for an election (for Merkle tree proof generation)
+    #[view(getEligibleVoters)]
+    fn get_eligible_voters(&self, election_id: u64) -> MultiValueEncoded<ManagedAddress> {
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+        
+        let mut result = MultiValueEncoded::new();
+        for voter in self.eligible_voters(election_id).iter() {
+            result.push(voter);
+        }
+        result
+    }
+
+    /// Returns all encrypted votes for an election (for threshold decryption)
+    #[view(getEncryptedVotes)]
+    fn get_encrypted_votes(&self, election_id: u64) -> MultiValueEncoded<ManagedBuffer> {
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+        
+        let mut result = MultiValueEncoded::new();
+        for vote in self.encrypted_votes(election_id).iter() {
+            result.push(vote);
+        }
+        result
+    }
+
+    /// Organizer publishes decrypted results after threshold ceremony
+    #[endpoint(publishResults)]
+    fn publish_results(
+        &self,
+        election_id: u64,
+        candidate_counts: MultiValueEncoded<MultiValue2<ManagedBuffer, u64>>,
+    ) {
+        self.require_organizer();
+        
+        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
+        
+        let mut info = self.election_info(election_id).get();
+        require!(!info.is_finalized, "Results already published");
+        
+        let current_timestamp = self.blockchain().get_block_timestamp();
+        require!(current_timestamp > info.end_time, "Election still ongoing");
+
+        // Store the results
+        let mut candidates_vec = ManagedVec::new();
+        let mut counts_vec = ManagedVec::new();
+        
+        for pair in candidate_counts {
+            let (candidate, count) = pair.into_tuple();
+            candidates_vec.push(candidate);
+            counts_vec.push(count);
+        }
+        
+        self.final_candidates(election_id).set(candidates_vec);
+        self.final_counts(election_id).set(counts_vec);
+        
+        // Mark as finalized
+        info.is_finalized = true;
+        self.election_info(election_id).set(info);
     }
 
     fn require_organizer(&self) {
@@ -349,6 +473,18 @@ pub trait VotingApp {
 
     #[storage_mapper("hasVoted")]
     fn has_voted(&self, id: u64) -> SetMapper<ManagedAddress>;
+
+    #[storage_mapper("privateVotes")]
+    fn private_votes(&self, id: u64) -> SetMapper<ManagedBuffer>;
+
+    #[storage_mapper("encryptedVotes")]
+    fn encrypted_votes(&self, id: u64) -> SetMapper<ManagedBuffer>;
+
+    #[storage_mapper("usedNonces")]
+    fn used_nonces(&self, election_id: u64) -> SetMapper<u64>;
+
+    #[storage_mapper("usedNullifiers")]
+    fn used_nullifiers(&self, election_id: u64) -> SetMapper<ManagedBuffer>;
 
     #[storage_mapper("voteCounts")]
     fn vote_counts(&self, id: u64, candidate: &ManagedBuffer) -> SingleValueMapper<u64>;

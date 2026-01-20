@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DKG Service - Key Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-banner {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .status-banner.online {
+            border-left: 5px solid #10b981;
+        }
+
+        .status-banner.offline {
+            border-left: 5px solid #ef4444;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f3f4f6;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #4b5563;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-gray {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .modal-header h3 {
+            color: #667eea;
+            font-size: 1.5em;
+        }
+
+        .key-section {
+            margin-bottom: 20px;
+        }
+
+        .key-section h4 {
+            color: #374151;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .key-value {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            color: #1f2937;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .info-box p {
+            color: #1e40af;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .alert-box {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .alert-warning {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            color: #92400e;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2em;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close-btn:hover {
+            color: #374151;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 DKG Key Management</h1>
+            <p>Generate and manage ElGamal encryption keys for elections</p>
+        </div>
+
+        <div id="statusBanner" class="status-banner">
+            <strong>Service Status:</strong> <span id="serviceStatus">Checking...</span>
+        </div>
+
+        <div id="contractAlert" class="alert-box alert-warning" style="display: none;">
+            ⚠️ <strong>Configuration Required:</strong> Set CONTRACT_ADDRESS and GATEWAY_URL in environment variables to fetch elections from blockchain.
+        </div>
+
+        <div class="card">
+            <h2>Elections & Encryption Keys</h2>
+            <p style="margin-bottom: 20px; color: #6b7280;">Generate ElGamal keys for homomorphic encryption</p>
+            <div id="electionsContent">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading elections...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>ℹ️ About DKG Key Management</h2>
+            <ul style="color: #6b7280; line-height: 1.8; padding-left: 20px;">
+                <li><strong>ElGamal Encryption:</strong> Uses distributed key generation to create threshold encryption keys</li>
+                <li><strong>Privacy:</strong> Votes are encrypted with the public key; only the tally is decrypted (requires 3 of 5 key shares)</li>
+                <li><strong>Manual Generation:</strong> You control when keys are generated for each election</li>
+                <li><strong>View Keys:</strong> Once generated, you can view and copy the public key parameters (p, g, h)</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- View Keys Modal -->
+    <div id="keysModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <div class="modal-header">
+                <h3>🔐 ElGamal Public Key</h3>
+                <p id="modalElectionInfo" style="color: #6b7280; margin-top: 5px;"></p>
+            </div>
+            <div id="keysContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Buffer polyfill for browser
+        const Buffer = {
+            from: function(data, encoding) {
+                if (encoding === 'base64') {
+                    const binaryString = atob(data);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    return {
+                        data: bytes,
+                        readBigUInt64BE: function(offset) {
+                            let value = 0n;
+                            for (let i = 0; i < 8; i++) {
+                                value = (value << 8n) | BigInt(this.data[offset + i]);
+                            }
+                            return value;
+                        },
+                        readUInt32BE: function(offset) {
+                            return (this.data[offset] << 24) | 
+                                   (this.data[offset + 1] << 16) | 
+                                   (this.data[offset + 2] << 8) | 
+                                   this.data[offset + 3];
+                        },
+                        readUInt8: function(offset) {
+                            return this.data[offset];
+                        },
+                        slice: function(start, end) {
+                            const sliced = this.data.slice(start, end);
+                            return {
+                                toString: function(encoding) {
+                                    if (encoding === 'utf8') {
+                                        return new TextDecoder().decode(sliced);
+                                    }
+                                    return '';
+                                }
+                            };
+                        }
+                    };
+                }
+                return { data: new Uint8Array() };
+            }
+        };
+
+        const API_BASE = '';  // Same origin
+        const GATEWAY_URL = 'https://devnet-gateway.multiversx.com';
+        const CONTRACT_ADDRESS = 'erd1qqqqqqqqqqqqqpgq3wwwwnn8t8l5jur9yflxdnl7y83p9x6yv8mswmjh4j';
+
+        let electionsData = [];
+        let ceremoniesData = [];
+
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                const statusBanner = document.getElementById('statusBanner');
+                const statusText = document.getElementById('serviceStatus');
+                
+                if (data.status === 'healthy') {
+                    statusBanner.className = 'status-banner online';
+                    statusText.textContent = '✅ Online';
+                } else {
+                    statusBanner.className = 'status-banner offline';
+                    statusText.textContent = '❌ Offline';
+                }
+            } catch (error) {
+                const statusBanner = document.getElementById('statusBanner');
+                const statusText = document.getElementById('serviceStatus');
+                statusBanner.className = 'status-banner offline';
+                statusText.textContent = '❌ Connection Failed';
+            }
+        }
+
+        async function fetchElections() {
+            try {
+                const response = await fetch(`${GATEWAY_URL}/vm-values/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        scAddress: CONTRACT_ADDRESS,
+                        funcName: 'getAllElections',
+                        args: []
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!data.data || !data.data.data || !data.data.data.returnData) {
+                    console.error('Invalid response format:', data);
+                    return [];
+                }
+
+                const returnData = data.data.data.returnData;
+                if (returnData.length === 0) {
+                    console.log('No elections found in contract');
+                    return [];
+                }
+
+                const elections = [];
+
+                // Each item in returnData is a complete ElectionInfo struct encoded as base64
+                for (let i = 0; i < returnData.length; i++) {
+                    try {
+                        const buffer = Buffer.from(returnData[i], 'base64');
+                        let offset = 0;
+
+                        // Read u64 id (8 bytes)
+                        const id = Number(buffer.readBigUInt64BE(offset));
+                        offset += 8;
+
+                        // Read name (u32 length + bytes)
+                        const nameLength = buffer.readUInt32BE(offset);
+                        offset += 4;
+                        const name = buffer.slice(offset, offset + nameLength).toString('utf8');
+                        offset += nameLength;
+
+                        // Read u64 start_time (8 bytes)
+                        const startTime = Number(buffer.readBigUInt64BE(offset));
+                        offset += 8;
+
+                        // Read u64 end_time (8 bytes)
+                        const endTime = Number(buffer.readBigUInt64BE(offset));
+                        offset += 8;
+
+                        // Read bool is_finalized (1 byte)
+                        const isFinalized = buffer.readUInt8(offset) === 1;
+                        offset += 1;
+
+                        // Skip Option<merkle_root> and Option<encryption_public_key>
+                        // We don't need these for display
+
+                        elections.push({ id, name, startTime, endTime, isFinalized });
+                    } catch (e) {
+                        console.error('Error parsing election at index', i, ':', e);
+                    }
+                }
+
+                console.log('Fetched elections:', elections);
+                return elections;
+            } catch (error) {
+                console.error('Error fetching elections:', error);
+                return [];
+            }
+        }
+
+        async function fetchCeremonies() {
+            try {
+                const response = await fetch(`${API_BASE}/dkg/ceremonies`);
+                const data = await response.json();
+                return data.success ? data.ceremonies : [];
+            } catch (error) {
+                console.error('Error fetching ceremonies:', error);
+                return [];
+            }
+        }
+
+        async function loadData() {
+            const content = document.getElementById('electionsContent');
+            console.log('Loading data...');
+            
+            try {
+                content.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading elections...</p>
+                    </div>
+                `;
+
+                console.log('Fetching elections...');
+                electionsData = await fetchElections();
+                console.log('Fetched elections:', electionsData.length);
+                
+                console.log('Fetching ceremonies...');
+                ceremoniesData = await fetchCeremonies();
+                console.log('Fetched ceremonies:', ceremoniesData.length);
+
+                if (electionsData.length === 0) {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📭</div>
+                            <h3>No Elections Found</h3>
+                            <p>Create an election first, then generate keys here</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Map ceremonies by election ID
+                const ceremonyMap = new Map();
+                ceremoniesData.forEach(c => {
+                    ceremonyMap.set(c.electionId, c);
+                });
+
+                console.log('Building table...');
+                const tableHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Election</th>
+                                <th>Status</th>
+                                <th>Keys</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${electionsData.map(election => {
+                                const ceremony = ceremonyMap.get(election.id.toString());
+                                const hasKey = !!ceremony;
+                                
+                                return `
+                                    <tr>
+                                        <td>
+                                            <div>
+                                                <strong>${election.name}</strong>
+                                                <div style="font-size: 0.85em; color: #6b7280;">ID: ${election.id}</div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge ${election.isFinalized ? 'badge-gray' : 'badge-success'}">
+                                                ${election.isFinalized ? 'Finalized' : 'Active'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            ${hasKey ? `
+                                                <span class="badge badge-info">🔐 Keys Generated</span>
+                                                <div style="font-size: 0.75em; color: #6b7280; margin-top: 5px;">
+                                                    ${ceremony.ceremonyId.substring(0, 12)}...
+                                                </div>
+                                            ` : `
+                                                <span class="badge badge-warning">No keys</span>
+                                            `}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group">
+                                                ${hasKey ? `
+                                                    <button class="btn btn-primary" onclick="viewKeys('${election.id}', '${election.name}')">
+                                                        View Keys
+                                                    </button>
+                                                ` : `
+                                                    <button class="btn btn-success" onclick="generateKeys(${election.id}, '${election.name}')" id="gen-btn-${election.id}">
+                                                        Generate Keys
+                                                    </button>
+                                                `}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                console.log('Setting table HTML...');
+                content.innerHTML = tableHTML;
+                console.log('Table rendered successfully');
+            } catch (error) {
+                console.error('Error loading data:', error);
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <h3>Failed to Load</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function generateKeys(electionId, electionName) {
+            const btn = document.getElementById(`gen-btn-${electionId}`);
+            if (!btn) return;
+            
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+
+            try {
+                // Calling the public-key endpoint auto-creates the ceremony
+                const response = await fetch(`${API_BASE}/dkg/public-key/${electionId}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to generate keys');
+                }
+
+                console.log('Generated keys:', data.publicKey);
+
+                // Now submit the public key to the contract
+                btn.textContent = 'Storing on chain...';
+                const storeResult = await storeKeysOnChain(electionId, data.publicKey);
+                
+                if (storeResult.success) {
+                    alert(`✅ Keys generated and stored successfully for "${electionName}"!\n\n🔐 Ceremony: ${data.ceremonyId}\n\n📦 Transaction: ${storeResult.txHash}`);
+                    await loadData();
+                } else {
+                    throw new Error(storeResult.error || 'Failed to store keys on chain');
+                }
+            } catch (error) {
+                console.error('Error generating keys:', error);
+                alert(`❌ Failed to generate keys: ${error.message}`);
+                btn.disabled = false;
+                btn.textContent = 'Generate Keys';
+            }
+        }
+
+        async function storeKeysOnChain(electionId, publicKey) {
+            try {
+                // Get the encoded key from the backend
+                const response = await fetch(`${API_BASE}/dkg/store-keys/${electionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        publicKey: {
+                            p: publicKey.p,
+                            g: publicKey.g,
+                            h: publicKey.h
+                        }
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success && result.encodedPublicKey) {
+                    // Redirect to the main voting app to sign the transaction with connected wallet
+                    const votingAppUrl = `http://localhost:3000/?storeKey=true&electionId=${electionId}&publicKey=${encodeURIComponent(result.encodedPublicKey)}`;
+                    
+                    // Show message and open in new tab
+                    alert(`✅ Keys generated!\n\nOpening the voting app to store keys on blockchain.\nYou'll need to sign the transaction with your wallet.`);
+                    window.open(votingAppUrl, '_blank');
+                    
+                    return { 
+                        success: true, 
+                        message: 'Redirecting to voting app for transaction signing',
+                        votingAppUrl 
+                    };
+                }
+                
+                return result;
+            } catch (error) {
+                console.error('Error storing keys on chain:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function viewKeys(electionId, electionName) {
+            try {
+                const response = await fetch(`${API_BASE}/dkg/public-key/${electionId}`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    alert('Failed to fetch keys: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                const modal = document.getElementById('keysModal');
+                const infoEl = document.getElementById('modalElectionInfo');
+                const contentEl = document.getElementById('keysContent');
+                
+                infoEl.textContent = `Election: ${electionName} (ID: ${electionId}) | Ceremony: ${data.ceremonyId}`;
+                
+                contentEl.innerHTML = `
+                    <div class="key-section">
+                        <h4>
+                            Prime (p)
+                            <button class="btn btn-primary" style="font-size: 0.8em; padding: 5px 10px;" onclick="copyToClipboard('${data.publicKey.p}', 'Prime (p)')">
+                                📋 Copy
+                            </button>
+                        </h4>
+                        <div class="key-value">${data.publicKey.p}</div>
+                    </div>
+
+                    <div class="key-section">
+                        <h4>
+                            Generator (g)
+                            <button class="btn btn-primary" style="font-size: 0.8em; padding: 5px 10px;" onclick="copyToClipboard('${data.publicKey.g}', 'Generator (g)')">
+                                📋 Copy
+                            </button>
+                        </h4>
+                        <div class="key-value">${data.publicKey.g}</div>
+                    </div>
+
+                    <div class="key-section">
+                        <h4>
+                            Public Key (h)
+                            <button class="btn btn-primary" style="font-size: 0.8em; padding: 5px 10px;" onclick="copyToClipboard('${data.publicKey.h}', 'Public Key (h)')">
+                                📋 Copy
+                            </button>
+                        </h4>
+                        <div class="key-value">${data.publicKey.h}</div>
+                    </div>
+
+                    <div class="info-box">
+                        <p>
+                            <strong>ℹ️ ElGamal Encryption:</strong> These parameters are used for homomorphic 
+                            encryption. Votes encrypted with this public key can be tallied without decryption. 
+                            Only the final result requires ${data.threshold} of ${data.totalShares} key shares to decrypt.
+                        </p>
+                    </div>
+                `;
+                
+                modal.classList.add('active');
+            } catch (error) {
+                console.error('Error fetching keys:', error);
+                alert('Failed to load keys: ' + error.message);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('keysModal').classList.remove('active');
+        }
+
+        function copyToClipboard(text, name) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert(`✅ ${name} copied to clipboard!`);
+            }).catch(err => {
+                console.error('Copy failed:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('keysModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // Initialize
+        checkHealth();
+        loadData();
+        
+        // Refresh every 10 seconds
+        setInterval(() => {
+            checkHealth();
+            loadData();
+        }, 10000);
+    </script>
+</body>

@@ -1,0 +1,9 @@
+# Logs directory for production
+*.log
+
+# Environment variables
+.env
+
+# Temporary files
+*.tmp
+*.temp

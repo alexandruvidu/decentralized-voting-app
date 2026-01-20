@@ -4,6 +4,10 @@ export interface Election {
   start_time: number;
   end_time: number;
   is_finalized: boolean;
+  candidates: string[];
+  has_encryption_key?: boolean; // convenience flag for UI
+  encryption_public_key?: string; // Optional: for threshold-encrypted voting
+  merkle_root?: string; // Optional: for Merkle-based voter eligibility
 }
 
 export interface ElectionResult {

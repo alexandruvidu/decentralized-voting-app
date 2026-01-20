@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Buffer } from 'buffer';
 import { 
-  AbiRegistry, 
-  Address, 
-  SmartContractTransactionsFactory, 
-  TransactionsFactoryConfig 
+  AbiRegistry,
+  Address,
+  BytesValue,
+  OptionValue,
+  SmartContractTransactionsFactory,
+  TransactionsFactoryConfig,
+  U64Value,
+  VariadicValue
 } from '@multiversx/sdk-core';
 import { useGetAccountInfo } from '@multiversx/sdk-dapp/out/react/account/useGetAccountInfo';
 import { useGetNetworkConfig } from '@multiversx/sdk-dapp/out/react/network/useGetNetworkConfig';
@@ -28,7 +31,9 @@ export function CreateElectionForm({ onClose, onSuccess }: CreateElectionFormPro
     startTime: '',
     endDate: '',
     endTime: '',
-    candidates: ''
+    candidates: '',
+    useMerkle: false,
+    merkleRoot: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,25 +65,51 @@ export function CreateElectionForm({ onClose, onSuccess }: CreateElectionFormPro
         return;
       }
 
-      // Create transaction using SmartContractTransactionsFactory
+      const merkleRootClean = formData.merkleRoot.trim().replace(/^0x/, '').toLowerCase();
+      if (formData.useMerkle) {
+        if (!merkleRootClean || merkleRootClean.length !== 64 || !/^[0-9a-f]+$/.test(merkleRootClean)) {
+          alert('Please provide a 32-byte Merkle root as 64 hex characters (optionally prefixed with 0x).');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const abi = AbiRegistry.create(votingAppAbi);
       const scFactory = new SmartContractTransactionsFactory({
         config: new TransactionsFactoryConfig({ chainID: network.chainId }),
         abi
       });
 
+      const candidateValues = candidatesList.map((c) => BytesValue.fromUTF8(c));
+
+      const fnName = formData.useMerkle ? 'createElectionWithMerkle' : 'createElection';
+
+      // Use a test encryption public key for encrypted voting (non-Merkle path)
+      const testEncryptionKey = BytesValue.fromHex('02' + 'a'.repeat(128));
+
+      const args = formData.useMerkle
+        ? [
+            BytesValue.fromUTF8(formData.name),
+            new U64Value(BigInt(startTimestamp)),
+            new U64Value(BigInt(endTimestamp)),
+            BytesValue.fromHex(merkleRootClean),
+            VariadicValue.fromItems(...candidateValues)
+          ]
+        : [
+            BytesValue.fromUTF8(formData.name),
+            new U64Value(BigInt(startTimestamp)),
+            new U64Value(BigInt(endTimestamp)),
+            OptionValue.newProvided(testEncryptionKey),
+            VariadicValue.fromItems(...candidateValues)
+          ];
+
       const transaction = await scFactory.createTransactionForExecute(
         new Address(address),
         {
           contract: new Address(contractAddress),
-          function: 'createElection',
+          function: fnName,
           gasLimit: BigInt(10_000_000),
-          arguments: [
-            Buffer.from(formData.name),
-            startTimestamp,
-            endTimestamp,
-            ...candidatesList.map((c) => Buffer.from(c))
-          ]
+          arguments: args
         }
       );
 
@@ -87,9 +118,12 @@ export function CreateElectionForm({ onClose, onSuccess }: CreateElectionFormPro
         transactionsDisplayInfo: {
           processingMessage: 'Creating election...',
           errorMessage: 'Error creating election',
-          successMessage: 'Election created successfully!'
+          successMessage: 'Election created successfully! Generate keys in DKG Management.'
         }
       });
+
+      // Note: DKG keys must be generated manually via the DKG Management page
+      // This gives organizers full control over when encryption is enabled
 
       onSuccess();
       onClose();
@@ -208,6 +242,33 @@ export function CreateElectionForm({ onClose, onSuccess }: CreateElectionFormPro
               <p className="text-sm text-gray-500 mt-1">
                 Separate candidate names with commas
               </p>
+            </div>
+
+            <div className="space-y-2 border rounded-lg p-3 dark:border-gray-700">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={formData.useMerkle}
+                  onChange={(e) => setFormData({ ...formData, useMerkle: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                Enable Merkle-based eligibility (optional)
+              </label>
+              {formData.useMerkle && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Merkle Root (hex, 32 bytes)</label>
+                  <input
+                    type="text"
+                    value={formData.merkleRoot}
+                    onChange={(e) => setFormData({ ...formData, merkleRoot: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 font-mono"
+                    placeholder="0x..."
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    Paste the root from your Merkle script (64 hex chars, no spaces)
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 pt-4">

@@ -9,11 +9,11 @@ interface ElectionListProps {
   onVote: (election: Election) => void;
   onViewResults: (election: Election) => void;
   onAddVoters?: (election: Election) => void;
-  onForceEnd?: (election: Election) => void;
-  onFinalize?: (election: Election) => void;
+  onEndElection?: (election: Election) => void;
+  onPublishResults?: (electionId: number) => void;
 }
 
-export function ElectionList({ elections, loading, onVote, onViewResults, onAddVoters, onForceEnd, onFinalize }: ElectionListProps) {
+export function ElectionList({ elections, loading, onVote, onViewResults, onAddVoters, onEndElection, onPublishResults }: ElectionListProps) {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -49,8 +49,8 @@ export function ElectionList({ elections, loading, onVote, onViewResults, onAddV
                 onVote={onVote}
                 onViewResults={onViewResults}
                 onAddVoters={onAddVoters}
-                onForceEnd={onForceEnd}
-                onFinalize={onFinalize}
+                onEndElection={onEndElection}
+                onPublishResults={onPublishResults}
               />
             ))}
           </div>
@@ -68,8 +68,8 @@ export function ElectionList({ elections, loading, onVote, onViewResults, onAddV
                 onVote={onVote}
                 onViewResults={onViewResults}
                 onAddVoters={onAddVoters}
-                onForceEnd={onForceEnd}
-                onFinalize={onFinalize}
+                onEndElection={onEndElection}
+                onPublishResults={onPublishResults}
               />
             ))}
           </div>
@@ -87,8 +87,8 @@ export function ElectionList({ elections, loading, onVote, onViewResults, onAddV
                 onVote={onVote}
                 onViewResults={onViewResults}
                 onAddVoters={onAddVoters}
-                onForceEnd={onForceEnd}
-                onFinalize={onFinalize}
+                onEndElection={onEndElection}
+                onPublishResults={onPublishResults}
               />
             ))}
           </div>

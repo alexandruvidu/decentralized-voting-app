@@ -1,0 +1,295 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Buffer } from 'buffer';
+import { useGetAccountInfo } from '@multiversx/sdk-dapp/out/react/account/useGetAccountInfo';
+import { useGetNetworkConfig } from '@multiversx/sdk-dapp/out/react/network/useGetNetworkConfig';
+import { signAndSendTransactions } from '@/helpers/signAndSendTransactions';
+import { contractAddress } from '@/config';
+import votingAppAbi from '@/contracts/voting-app.abi.json';
+
+interface Election {
+  id: number;
+  name: string;
+  startTime: number;
+  endTime: number;
+  isFinalized: boolean;
+}
+
+interface DKGCeremony {
+  ceremonyId: string;
+  electionId: number;
+  publicKey?: { p: string; g: string; h: string };
+  status: string;
+}
+
+const DKG_SERVICE_URL = '/dkg-api';
+
+// Provide Buffer in browser for downstream libs (window + globalThis)
+if (typeof window !== 'undefined' && !(window as any).Buffer) {
+  (window as any).Buffer = Buffer;
+}
+if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
+  (globalThis as any).Buffer = Buffer;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  if (typeof atob === 'function') {
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  if (typeof Buffer !== 'undefined') {
+    return Uint8Array.from(Buffer.from(base64, 'base64'));
+  }
+
+  throw new Error('Base64 decode not supported in this environment');
+}
+
+export default function DKGPage() {
+  const { address } = useGetAccountInfo();
+  const { network } = useGetNetworkConfig();
+  const [elections, setElections] = useState<Election[]>([]);
+  const [ceremonies, setCeremonies] = useState<DKGCeremony[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generatingFor, setGeneratingFor] = useState<number | null>(null);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadData() {
+    await Promise.all([fetchElections(), fetchCeremonies()]);
+    setLoading(false);
+  }
+
+  async function fetchElections() {
+    try {
+      const response = await fetch('https://devnet-gateway.multiversx.com/vm-values/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scAddress: contractAddress,
+          funcName: 'getAllElections',
+          args: []
+        })
+      });
+
+      const data = await response.json();
+
+      if (!data.data?.data?.returnData) {
+        setElections([]);
+        return;
+      }
+
+      const parsedElections: Election[] = [];
+
+      for (const electionData of data.data.data.returnData) {
+        try {
+          const bytes = base64ToBytes(electionData);
+          const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+          let offset = 0;
+
+          const id = Number(view.getBigUint64(offset));
+          offset += 8;
+
+          const nameLength = view.getUint32(offset);
+          offset += 4;
+
+          const nameBytes = bytes.slice(offset, offset + nameLength);
+          const name = new TextDecoder().decode(nameBytes);
+          offset += nameLength;
+
+          const startTime = Number(view.getBigUint64(offset));
+          offset += 8;
+
+          const endTime = Number(view.getBigUint64(offset));
+          offset += 8;
+
+          const isFinalized = view.getUint8(offset) === 1;
+
+          parsedElections.push({ id, name, startTime, endTime, isFinalized });
+        } catch (e) {
+          console.error('Error parsing election:', e);
+        }
+      }
+
+      setElections(parsedElections);
+    } catch (error) {
+      console.error('Error fetching elections:', error);
+    }
+  }
+
+  async function fetchCeremonies() {
+    try {
+      const response = await fetch(`${DKG_SERVICE_URL}/dkg/ceremonies`);
+      const data = await response.json();
+      setCeremonies(data.ceremonies || []);
+    } catch (error) {
+      console.error('Error fetching ceremonies:', error);
+    }
+  }
+
+  async function generateKeys(electionId: number, electionName: string) {
+    if (!address) {
+      alert('Please connect your wallet first');
+      return;
+    }
+
+    setGeneratingFor(electionId);
+
+    try {
+      const response = await fetch(`${DKG_SERVICE_URL}/dkg/public-key/${electionId}`);
+      const data = await response.json();
+
+      if (!data.success || !data.publicKey) {
+        throw new Error(data.error || 'Failed to generate keys');
+      }
+
+      // Redirect to the store-key page so the user signs the on-chain transaction with their wallet
+      const params = new URLSearchParams({
+        electionId: electionId.toString(),
+        publicKey: data.publicKey.h // DKG service returns { p, g, h }; the contract only needs h
+      });
+
+      window.location.href = `/store-key?${params.toString()}`;
+      return;
+    } catch (error) {
+      console.error('Error generating keys:', error);
+      alert(`Failed to generate keys: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setGeneratingFor(null);
+    }
+  }
+
+  function getCeremonyForElection(electionId: number): DKGCeremony | undefined {
+    return ceremonies.find((c) => c.electionId === electionId);
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading elections...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">DKG Key Management</h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Generate and store threshold encryption keys for elections
+        </p>
+      </div>
+
+      {!address && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+          <p className="text-yellow-800 dark:text-yellow-200">
+            ⚠️ Please connect your wallet to generate encryption keys
+          </p>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-semibold">Elections</h2>
+        </div>
+
+        {elections.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+            No elections found
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {elections.map((election) => {
+              const ceremony = getCeremonyForElection(election.id);
+              const hasKeys = ceremony && ceremony.publicKey;
+
+              return (
+                <div key={election.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg">{election.name}</h3>
+                      <div className="flex gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        <span>ID: {election.id}</span>
+                        <span>
+                          {new Date(election.startTime * 1000).toLocaleDateString()} - {new Date(election.endTime * 1000).toLocaleDateString()}
+                        </span>
+                        {election.isFinalized && (
+                          <span className="text-green-600 dark:text-green-400">✓ Finalized</span>
+                        )}
+                      </div>
+                      {hasKeys && (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            🔐 Keys Generated
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="ml-4">
+                      {hasKeys ? (
+                        <button
+                          disabled
+                          className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 rounded cursor-not-allowed"
+                        >
+                          Keys Already Generated
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => generateKeys(election.id, election.name)}
+                          disabled={!address || generatingFor === election.id}
+                          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded transition"
+                        >
+                          {generatingFor === election.id ? (
+                            <span className="flex items-center gap-2">
+                              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                              Generating...
+                            </span>
+                          ) : (
+                            'Generate Keys'
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">ℹ️ How it works</h3>
+        <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1 list-disc list-inside">
+          <li>Click "Generate Keys" to create threshold encryption keys for an election</li>
+          <li>The DKG service generates a public key (p, g, h) for ElGamal encryption</li>
+          <li>You'll be prompted to sign a transaction to store the public key on the blockchain</li>
+          <li>Voters will automatically encrypt their votes using this public key</li>
+          <li>Votes can only be decrypted using threshold decryption after the election ends</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+

@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.pem
+*.log
+relayer-wallet.pem
+relayer-wallet.json
+.DS_Store
