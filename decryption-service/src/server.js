@@ -95,6 +95,30 @@ const validate = (req, res, next) => {
 const dkgSessions = new Map();
 const privateKeys = new Map();
 
+// ----------------------------------------------------------------------------
+// K-SLOT BALLOT HELPERS (pack/unpack K ciphertexts into a single string)
+// Format: "KSLOTS:v1:" + K + ":" + hex(c1,c2) joined by ":"
+// Example: KSLOTS:v1:3:HEX1:HEX2:HEX3
+// ----------------------------------------------------------------------------
+function packKSlots(ciphertexts) {
+  const K = ciphertexts.length;
+  return `KSLOTS:v1:${K}:${ciphertexts.join(':')}`;
+}
+
+function unpackKSlots(packed) {
+  if (!packed.startsWith('KSLOTS:v1:')) {
+    throw new Error('Invalid packed ballot format');
+  }
+  const parts = packed.split(':');
+  // parts: [KSLOTS, v1, K, slot1, slot2, ...]
+  const K = parseInt(parts[2], 10);
+  const slots = parts.slice(3);
+  if (slots.length !== K) {
+    throw new Error(`Packed ballot K=${K} mismatch, got ${slots.length}`);
+  }
+  return { K, slots };
+}
+
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================
@@ -152,6 +176,51 @@ app.post('/api/encrypt', asyncHandler(async (req, res) => {
     keySizeBits: publicKey.p.toString(2).length
   });
 }));
+
+/**
+ * POST /api/encrypt/kslots
+ * Body: { candidates: string[], selected: string, publicKeyHex? , p?, g?, h? }
+ * Returns: { packedBallot, slots, K }
+ */
+app.post('/api/encrypt/kslots',
+  [
+    body('candidates').isArray().notEmpty(),
+    body('selected').isString().notEmpty(),
+    validate
+  ],
+  asyncHandler(async (req, res) => {
+    const { candidates, selected, publicKeyHex, p, g, h } = req.body || {};
+
+    let publicKey;
+    if (p && g && h) {
+      publicKey = parsePublicKeyFromComponents(p, g, h);
+    } else if (publicKeyHex) {
+      publicKey = parsePublicKeyFromHex(publicKeyHex);
+    } else {
+      return res.status(400).json({ error: 'Missing public key: provide publicKeyHex or (p,g,h)' });
+    }
+
+    const K = candidates.length;
+    if (!candidates.includes(selected)) {
+      return res.status(400).json({ error: 'Selected candidate not in candidates list' });
+    }
+
+    // Build K slots: message = g^m where m ∈ {0,1}
+    const slots = [];
+    for (const candidate of candidates) {
+      const m = candidate === selected ? 1n : 0n;
+      const rand = randomBigInt(1n, publicKey.p - 2n);
+      const c1 = modPow(publicKey.g, rand, publicKey.p);
+      const hr = modPow(publicKey.h, rand, publicKey.p);
+      const message = modPow(publicKey.g, m, publicKey.p); // g^m
+      const c2 = (hr * message) % publicKey.p;
+      slots.push(encodeCiphertext(c1, c2));
+    }
+
+    const packedBallot = packKSlots(slots);
+    res.json({ packedBallot, slots, K });
+  })
+);
 
 // ============================================================================
 // DKG KEY STORAGE
@@ -298,7 +367,6 @@ app.post('/api/decrypt/batch',
   [
     body('electionId').isString().notEmpty(),
     body('encryptedVotes').isArray().notEmpty(),
-    body('encryptedVotes.*').isString().matches(/^0x[0-9a-fA-F]+$/),
     body('candidates').isArray().notEmpty(),
     body('candidates.*').isString().notEmpty(),
     validate
@@ -306,7 +374,7 @@ app.post('/api/decrypt/batch',
   asyncHandler(async (req, res) => {
     const { electionId, encryptedVotes, candidates } = req.body;
 
-    logger.info('Batch decryption request', { 
+    logger.info('Batch decryption request (K-slot homomorphic)', { 
       electionId, 
       voteCount: encryptedVotes.length,
       candidateCount: candidates.length
@@ -322,106 +390,89 @@ app.post('/api/decrypt/batch',
     }
 
     const { x, publicKey } = keyData;
-   
-     // If publicKey is not stored (threshold reconstruction), use default ElGamal params
-     let p, g;
-     if (publicKey && publicKey.p) {
-       p = publicKey.p;
-       g = publicKey.g || 2n;
-     } else {
-       // Use RFC 3526 Group 14 default parameters
-       const { DEFAULT_ELGAMAL_PARAMS } = await import('./crypto.js');
-       p = DEFAULT_ELGAMAL_PARAMS.p;
-       g = DEFAULT_ELGAMAL_PARAMS.g;
-       logger.info('Using default ElGamal parameters for decryption', { electionId });
-     }
-
-    // Create candidate hash mapping
-    const candidateHashes = new Map();
-    for (const candidate of candidates) {
-      const hash = encodeCandidateName(candidate);
-      candidateHashes.set(hash.toString(), candidate);
-      logger.debug('Candidate hash', { 
-        candidate, 
-        hash: hash.toString().substring(0, 20) + '...' 
-      });
+    let p = publicKey?.p, g = publicKey?.g || 2n;
+    if (!p) {
+      const { DEFAULT_ELGAMAL_PARAMS } = await import('./crypto.js');
+      p = DEFAULT_ELGAMAL_PARAMS.p;
+      g = DEFAULT_ELGAMAL_PARAMS.g;
+      logger.info('Using default ElGamal parameters for decryption', { electionId });
     }
 
     const startTime = Date.now();
     const voteCounts = {};
     let invalidVotes = 0;
 
-    // Initialize counts
+    // Initialize encrypted tallies per candidate
+    const encryptedTallies = new Map();
     for (const candidate of candidates) {
+      encryptedTallies.set(candidate, { c1: 1n, c2: 1n, votes: 0 });
       voteCounts[candidate] = 0;
     }
 
-    // Decrypt each vote
+    // Unpack each packed ballot and multiply into candidate tallies
     for (let i = 0; i < encryptedVotes.length; i++) {
       try {
-        const encryptedVote = encryptedVotes[i];
-        
-        // Decode ciphertext
-        const { c1, c2 } = decodeCiphertext(encryptedVote);
-
-        // Decrypt: m = c2 * (c1^x)^(-1) mod p
-        const c1x = modPow(c1, x, p);
-        const c1xInv = modInverse(c1x, p);
-        const m = (c2 * c1xInv) % p;
-
-        // Map decrypted message to candidate
-        const mStr = m.toString();
-        const candidate = candidateHashes.get(mStr);
-
-        logger.info('Decryption Debug', {
-          voteIndex: i,
-          decryptedM: mStr,
-          foundCandidate: candidate || 'NONE',
-          allHashes: Array.from(candidateHashes.keys())
-        });
-
-        if (candidate) {
-          voteCounts[candidate]++;
-          logger.debug('Vote decrypted', { 
-            voteIndex: i, 
-            candidate,
-            messageHash: mStr.substring(0, 20) + '...'
-          });
-        } else {
-          invalidVotes++;
-          logger.warn('Invalid vote: no matching candidate', { 
-            voteIndex: i,
-            messageHash: mStr.substring(0, 20) + '...',
-            availableCandidates: candidates
-          });
+        const packed = encryptedVotes[i];
+        const { K, slots } = unpackKSlots(packed);
+        if (K !== candidates.length) {
+          throw new Error(`K mismatch: expected ${candidates.length}, got ${K}`);
+        }
+        for (let k = 0; k < K; k++) {
+          const candidate = candidates[k];
+          const { c1, c2 } = decodeCiphertext(slots[k]);
+          const tally = encryptedTallies.get(candidate);
+          tally.c1 = (tally.c1 * c1) % p;
+          tally.c2 = (tally.c2 * c2) % p;
         }
       } catch (error) {
         invalidVotes++;
-        logger.error('Error decrypting vote', { 
-          voteIndex: i, 
-          error: error.message 
-        });
+        logger.warn('Invalid packed ballot', { index: i, error: error.message });
       }
+    }
+
+    // Decrypt one sum per candidate and compute discrete log
+    for (const candidate of candidates) {
+      const tally = encryptedTallies.get(candidate);
+      const c1x = modPow(tally.c1, x, p);
+      const c1xInv = modInverse(c1x, p);
+      const mSum = (tally.c2 * c1xInv) % p; // equals g^count
+
+      // Brute-force discrete log base g for small counts
+      let count = 0;
+      let current = 1n;
+      const MAX_VOTES = encryptedVotes.length; // upper bound
+      for (let k = 0; k <= MAX_VOTES; k++) {
+        if (current === mSum) { count = k; break; }
+        current = (current * g) % p;
+      }
+      voteCounts[candidate] = count;
     }
 
     const decryptionTime = Date.now() - startTime;
     const totalVotes = encryptedVotes.length - invalidVotes;
 
-    logger.info('Batch decryption completed', {
+    logger.info('✅ HOMOMORPHIC TALLYING COMPLETED (K-slot)', {
       electionId,
+      method: 'kslots-homomorphic',
       totalVotes,
       invalidVotes,
+      candidatesProcessed: candidates.length,
+      decryptionsPerformed: candidates.length,
       decryptionTimeMs: decryptionTime,
-      results: voteCounts
+      results: voteCounts,
+      efficiency: `${encryptedVotes.length} votes → ${candidates.length} decryptions`
     });
 
     res.json({
       success: true,
+      method: 'kslots-homomorphic',
       results: voteCounts,
       totalVotes,
       invalidVotes,
       decryptionTimeMs: decryptionTime,
-      electionId
+      decryptionsPerformed: candidates.length,
+      electionId,
+      message: `Homomorphic tallying: ${encryptedVotes.length} packed ballots → ${candidates.length} decryptions`
     });
   })
 );

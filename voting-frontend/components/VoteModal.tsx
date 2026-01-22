@@ -187,8 +187,8 @@ export function VoteModal({ election, onClose, onSuccess }: VoteModalProps) {
       
       // Call local encryption service (port 3004)
       const encryptPayload: Record<string, any> = {
-        publicKeyHex: publicKeyHexWith0x,
-        candidateName: selectedCandidate
+        candidates,
+        selected: selectedCandidate
       };
 
       // If DKG p/g/h available, send them alongside
@@ -196,11 +196,14 @@ export function VoteModal({ election, onClose, onSuccess }: VoteModalProps) {
         encryptPayload.p = publicKeyPGH.p;
         encryptPayload.g = publicKeyPGH.g;
         encryptPayload.h = publicKeyPGH.h;
+      } else {
+        // Fallback to hex public key when p/g/h are not available
+        encryptPayload.publicKeyHex = publicKeyHexWith0x;
       }
 
       console.log('Encryption payload (sanitized):', {
         candidateName: selectedCandidate,
-        publicKeyHexLen: encryptPayload.publicKeyHex.length,
+        publicKeyHexLen: (encryptPayload as any).publicKeyHex ? (encryptPayload as any).publicKeyHex.length : 0,
         hasPGH: !!publicKeyPGH
       });
 
@@ -208,7 +211,7 @@ export function VoteModal({ election, onClose, onSuccess }: VoteModalProps) {
         || process.env.NEXT_PUBLIC_ENCRYPTION_SERVICE_URL
         || '/crypto-api';
 
-      const encryptResponse = await fetch(`${encryptServiceUrl}/api/encrypt`, {
+      const encryptResponse = await fetch(`${encryptServiceUrl}/api/encrypt/kslots`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(encryptPayload)
@@ -226,10 +229,10 @@ export function VoteModal({ election, onClose, onSuccess }: VoteModalProps) {
         throw new Error(`Encryption service error (status ${encryptResponse.status}): ${parsed.error || text || 'Unknown error'}`);
       }
 
-      const { encryptedBallot: encryptedBallotHex, encryptionTimeMs, keySizeBits } = await encryptResponse.json();
-      console.log(`✅ Vote encrypted in ${encryptionTimeMs}ms with ${keySizeBits}-bit key`);
+      const { packedBallot } = await encryptResponse.json();
+      console.log(`✅ Packed K-slot ballot created`);
       
-      const encryptedBallot = Buffer.from(encryptedBallotHex, 'hex');
+      const encryptedBallot = Buffer.from(packedBallot, 'utf8');
 
       // Create transaction for encrypted vote (non-Merkle path)
       setEncryptionStatus('📡 Submitting to blockchain...');
@@ -241,12 +244,16 @@ export function VoteModal({ election, onClose, onSuccess }: VoteModalProps) {
         abi
       });
 
+      // Use a high fixed gas limit per request: 100M
+      const adjustedGasLimit = 100_000_000n;
+      console.log('Using gas limit for vote:', Number(adjustedGasLimit).toLocaleString(), 'bytes:', encryptedBallot.length);
+
       const transaction = await scFactory.createTransactionForExecute(
         new Address(address),
         {
           contract: new Address(contractAddress),
           function: 'vote',
-          gasLimit: BigInt(15_000_000),
+          gasLimit: adjustedGasLimit,
           arguments: [election.id, encryptedBallot]
         }
       );

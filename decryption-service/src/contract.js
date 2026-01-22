@@ -104,9 +104,13 @@ export async function fetchEncryptedVotes(electionId) {
     }
 
     // Parse return data
-    // Format: array of hex-encoded encrypted ballots
-    const votes = response.returnData.map(encodedVote => {
+    // Detect K-slot packed ballots stored as UTF-8 strings, else return hex
+    const votes = response.returnData.map((encodedVote) => {
       const voteBuffer = decodeBase64(encodedVote);
+      const asText = voteBuffer.toString('utf8');
+      if (asText.startsWith('KSLOTS:v1:')) {
+        return asText;
+      }
       return '0x' + voteBuffer.toString('hex');
     });
 
