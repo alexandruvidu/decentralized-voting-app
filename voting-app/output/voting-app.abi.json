@@ -154,9 +154,6 @@
             "outputs": []
         },
         {
-            "docs": [
-                "Merkle-based, privacy-preserving voting (no on-chain whitelist)"
-            ],
             "name": "voteWithMerkle",
             "mutability": "mutable",
             "inputs": [
@@ -176,25 +173,6 @@
                     "name": "merkle_proof",
                     "type": "variadic<bytes>",
                     "multi_arg": true
-                }
-            ],
-            "outputs": []
-        },
-        {
-            "name": "voteEncrypted",
-            "mutability": "mutable",
-            "inputs": [
-                {
-                    "name": "election_id",
-                    "type": "u64"
-                },
-                {
-                    "name": "encrypted_vote",
-                    "type": "bytes"
-                },
-                {
-                    "name": "nonce",
-                    "type": "u64"
                 }
             ],
             "outputs": []
@@ -261,8 +239,7 @@
         },
         {
             "docs": [
-                "Returns only the candidate names for a given election.",
-                "This avoids returning vote counts when the frontend only needs names."
+                "Returns only the candidate names for a given election."
             ],
             "name": "getElectionCandidates",
             "mutability": "readonly",
@@ -294,25 +271,6 @@
             "outputs": [
                 {
                     "type": "Option<bytes>"
-                }
-            ]
-        },
-        {
-            "docs": [
-                "Returns all eligible voters for an election (for Merkle tree proof generation)"
-            ],
-            "name": "getEligibleVoters",
-            "mutability": "readonly",
-            "inputs": [
-                {
-                    "name": "election_id",
-                    "type": "u64"
-                }
-            ],
-            "outputs": [
-                {
-                    "type": "variadic<Address>",
-                    "multi_result": true
                 }
             ]
         },

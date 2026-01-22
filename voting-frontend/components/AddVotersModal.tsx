@@ -76,7 +76,7 @@ export function AddVotersModal({ electionId, electionName, onClose, onSuccess }:
         {
           contract: new Address(contractAddress),
           function: 'addVoters',
-          gasLimit: BigInt(5_000_000 + (validAddresses.length * 500_000)), // Scale gas with number of voters
+          gasLimit: BigInt(20_000_000 + (validAddresses.length * 2_000_000)), // Generous gas: 20M base + 2M per voter
           arguments: [
             electionId,
             ...validAddresses

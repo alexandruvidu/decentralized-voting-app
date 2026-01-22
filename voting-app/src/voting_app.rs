@@ -205,7 +205,6 @@ pub trait VotingApp {
         self.has_voted(election_id).insert(caller);
     }
 
-    /// Merkle-based, privacy-preserving voting (no on-chain whitelist)
     #[endpoint(voteWithMerkle)]
     fn vote_with_merkle(
         &self,
@@ -244,32 +243,6 @@ pub trait VotingApp {
 
         self.used_nullifiers(election_id).insert(nullifier);
         self.encrypted_votes(election_id).insert(encrypted_ballot);
-    }
-
-    #[endpoint(voteEncrypted)]
-    fn vote_encrypted(&self, election_id: u64, encrypted_vote: ManagedBuffer, nonce: u64) {
-        let caller = self.blockchain().get_caller();
-        
-        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
-        
-        let info = self.election_info(election_id).get();
-        let current_timestamp = self.blockchain().get_block_timestamp();
-
-        require!(current_timestamp >= info.start_time, "Election not started");
-        require!(current_timestamp <= info.end_time, "Election ended");
-        require!(!info.is_finalized, "Election finalized");
-
-        // Verify that this election has encryption enabled
-        require!(info.encryption_public_key.is_some(), "This election does not use encrypted voting");
-        
-        // Replay protection: check if nonce has been used
-        require!(!self.used_nonces(election_id).contains(&nonce), "Nonce already used - replay attack detected");
-        self.used_nonces(election_id).insert(nonce);
-        
-        // For relayer-based voting, caller is the relayer
-        // Relayer verifies eligibility and prevents duplicates off-chain
-        // Store the encrypted vote (cannot be read without threshold decryption)
-        self.encrypted_votes(election_id).insert(encrypted_vote);
     }
 
     #[view(verifyMerkleProof)]
@@ -354,7 +327,6 @@ pub trait VotingApp {
     }
 
     /// Returns only the candidate names for a given election.
-    /// This avoids returning vote counts when the frontend only needs names.
     #[view(getElectionCandidates)]
     fn get_election_candidates(&self, election_id: u64) -> MultiValueEncoded<ManagedBuffer> {
         let info = self.election_info(election_id).get();
@@ -384,18 +356,6 @@ pub trait VotingApp {
         
         let info = self.election_info(election_id).get();
         info.encryption_public_key
-    }
-
-    /// Returns all eligible voters for an election (for Merkle tree proof generation)
-    #[view(getEligibleVoters)]
-    fn get_eligible_voters(&self, election_id: u64) -> MultiValueEncoded<ManagedAddress> {
-        require!(!self.election_info(election_id).is_empty(), "Election does not exist");
-        
-        let mut result = MultiValueEncoded::new();
-        for voter in self.eligible_voters(election_id).iter() {
-            result.push(voter);
-        }
-        result
     }
 
     /// Returns all encrypted votes for an election (for threshold decryption)
@@ -479,9 +439,6 @@ pub trait VotingApp {
 
     #[storage_mapper("encryptedVotes")]
     fn encrypted_votes(&self, id: u64) -> SetMapper<ManagedBuffer>;
-
-    #[storage_mapper("usedNonces")]
-    fn used_nonces(&self, election_id: u64) -> SetMapper<u64>;
 
     #[storage_mapper("usedNullifiers")]
     fn used_nullifiers(&self, election_id: u64) -> SetMapper<ManagedBuffer>;
