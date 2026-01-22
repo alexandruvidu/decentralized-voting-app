@@ -36,3 +36,5 @@ Thumbs.db
 # Swap
 *.swp
 *.swo
+
+decryption-service/crypto-data/

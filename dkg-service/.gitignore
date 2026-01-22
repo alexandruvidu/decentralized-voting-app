@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+
+# Logs
+*.log
+dkg.log
+
+# DKG persistent storage (contains private keys and ceremony data)
+dkg-data/
+
+# OS files
+.DS_Store
+Thumbs.db

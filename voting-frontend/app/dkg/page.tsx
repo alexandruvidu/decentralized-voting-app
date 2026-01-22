@@ -65,16 +65,36 @@ export default function DKGPage() {
   const [ceremonies, setCeremonies] = useState<DKGCeremony[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingFor, setGeneratingFor] = useState<number | null>(null);
+  const [currentContract, setCurrentContract] = useState<string | null>(null);
+  const [storageStats, setStorageStats] = useState<any>(null);
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000);
+    const interval = setInterval(() => {
+      // Don't set loading on background refreshes
+      loadDataSilent();
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
   async function loadData() {
-    await Promise.all([fetchElections(), fetchCeremonies()]);
+    setLoading(true);
+    await Promise.all([
+      fetchElections(), 
+      fetchCeremonies(),
+      fetchContractAddress(),
+      fetchStorageStats()
+    ]);
     setLoading(false);
+  }
+
+  async function loadDataSilent() {
+    await Promise.all([
+      fetchElections(), 
+      fetchCeremonies(),
+      fetchContractAddress(),
+      fetchStorageStats()
+    ]);
   }
 
   async function fetchElections() {
@@ -144,6 +164,30 @@ export default function DKGPage() {
     }
   }
 
+  async function fetchContractAddress() {
+    try {
+      const response = await fetch(`${DKG_SERVICE_URL}/contract/current`);
+      const data = await response.json();
+      if (data.success && data.contractAddress) {
+        setCurrentContract(data.contractAddress);
+      }
+    } catch (error) {
+      console.error('Error fetching contract address:', error);
+    }
+  }
+
+  async function fetchStorageStats() {
+    try {
+      const response = await fetch(`${DKG_SERVICE_URL}/storage/stats`);
+      const data = await response.json();
+      if (data.success) {
+        setStorageStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching storage stats:', error);
+    }
+  }
+
   async function generateKeys(electionId: number, electionName: string) {
     if (!address) {
       alert('Please connect your wallet first');
@@ -193,11 +237,20 @@ export default function DKGPage() {
 
   return (
     <div className="container mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">DKG Key Management</h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Generate and store threshold encryption keys for elections
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">DKG Key Management</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Generate and store threshold encryption keys for elections
+          </p>
+        </div>
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition disabled:opacity-50"
+        >
+          {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
+        </button>
       </div>
 
       {!address && (
@@ -277,6 +330,65 @@ export default function DKGPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Storage Information */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-semibold">Storage Information</h2>
+        </div>
+        <div className="p-4 space-y-4">
+          {currentContract && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Contract</h3>
+              <code className="block px-3 py-2 bg-gray-100 dark:bg-gray-900 rounded text-sm font-mono break-all">
+                {currentContract}
+              </code>
+            </div>
+          )}
+          
+          {storageStats && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Stored Ceremonies: {ceremonies.length}
+              </h3>
+              {ceremonies.length > 0 && (
+                <div className="space-y-2">
+                  {ceremonies.map((ceremony) => (
+                    <div key={ceremony.ceremonyId} className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-700/50 rounded">
+                      <div>
+                        <span className="text-sm font-medium">Election {ceremony.electionId}</span>
+                        <span className="ml-3 text-xs text-gray-500 dark:text-gray-400">
+                          {ceremony.ceremonyId}
+                        </span>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        ceremony.status === 'verified' || ceremony.status === 'finalized'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          : ceremony.status === 'distributed'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+                      }`}>
+                        {ceremony.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {storageStats && storageStats.totalContracts > 1 && (
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Other Contracts ({storageStats.totalContracts - 1})
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Data for previous contract deployments is preserved but inactive
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">

@@ -10,9 +10,46 @@ import {
   createVerificationHash,
   verifyShare
 } from './threshold-crypto.js';
+import {
+  loadCeremonies,
+  saveCeremonies
+} from './storage.js';
 
-// Store active ceremonies in memory (in production, use database)
-const ceremonies = new Map();
+// Current contract address (set via setContractAddress before operations)
+let currentContractAddress = null;
+
+// In-memory cache (loaded from disk per contract)
+let ceremonies = new Map();
+
+/**
+ * Set the current contract address for ceremony operations
+ */
+export function setContractAddress(contractAddress) {
+  if (currentContractAddress !== contractAddress) {
+    currentContractAddress = contractAddress;
+    // Load ceremonies for this contract
+    ceremonies = loadCeremonies(contractAddress);
+    console.log(`🔑 Switched to contract: ${contractAddress}`);
+  }
+}
+
+/**
+ * Get current contract address
+ */
+export function getCurrentContractAddress() {
+  return currentContractAddress;
+}
+
+/**
+ * Persist current ceremonies to disk
+ */
+function persistCeremonies() {
+  if (!currentContractAddress) {
+    console.warn('⚠️  No contract address set, skipping persist');
+    return;
+  }
+  saveCeremonies(currentContractAddress, ceremonies);
+}
 
 /**
  * Create a new DKG ceremony
@@ -101,6 +138,7 @@ export function setupCeremony({
   };
   
   ceremonies.set(ceremonyId, ceremony);
+  persistCeremonies();
   
   return {
     ceremonyId,
@@ -141,6 +179,7 @@ export function distributeShares(ceremonyId) {
   // Update ceremony status
   ceremony.status = 'distributed';
   ceremony.distributedAt = new Date().toISOString();
+  persistCeremonies();
   
   return {
     ceremonyId,
@@ -198,6 +237,7 @@ export function verifyAllShares(ceremonyId) {
   if (allValid) {
     ceremony.status = 'verified';
     ceremony.verifiedAt = new Date().toISOString();
+    persistCeremonies();
   }
   
   return {
@@ -323,6 +363,7 @@ export function finalizeCeremony(ceremonyId) {
   ceremony.privateKey = null;
   ceremony.status = 'finalized';
   ceremony.finalizedAt = new Date().toISOString();
+  persistCeremonies();
   
   return {
     ceremonyId,

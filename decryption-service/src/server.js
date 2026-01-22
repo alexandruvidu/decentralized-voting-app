@@ -12,6 +12,9 @@
  * - Helmet security headers
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -32,6 +35,12 @@ import {
   randomBigInt,
   DEFAULT_ELGAMAL_PARAMS
 } from './crypto.js';
+import {
+  loadPrivateKeys,
+  savePrivateKeys,
+  wipePrivateKeys,
+  getCryptoStorageStats
+} from './crypto-storage.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -89,11 +98,31 @@ const validate = (req, res, next) => {
 };
 
 /**
- * In-memory storage for DKG sessions and private keys
- * In production, use Redis or secure key management service (KMS)
+ * Persistent storage for private keys (scoped by contract address)
+ */
+const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
+let privateKeys = new Map();
+
+if (CONTRACT_ADDRESS) {
+  privateKeys = loadPrivateKeys(CONTRACT_ADDRESS);
+  console.log(`🔐 Loaded private keys for contract: ${CONTRACT_ADDRESS}`);
+} else {
+  console.warn('⚠️  No CONTRACT_ADDRESS in .env - keys will not persist');
+}
+
+/**
+ * Persist keys to disk
+ */
+function persistKeys() {
+  if (CONTRACT_ADDRESS) {
+    savePrivateKeys(CONTRACT_ADDRESS, privateKeys);
+  }
+}
+
+/**
+ * DKG sessions (transient, not persisted)
  */
 const dkgSessions = new Map();
-const privateKeys = new Map();
 
 // ----------------------------------------------------------------------------
 // K-SLOT BALLOT HELPERS (pack/unpack K ciphertexts into a single string)
@@ -302,6 +331,18 @@ app.post('/api/dkg/store-private-key',
       });
     }
 
+    try {
+      persistKeys();
+    } catch (error) {
+      logger.error('Failed to persist keys to disk', { 
+        electionId, 
+        error: error.message 
+      });
+      return res.status(500).json({ 
+        error: 'Failed to store reconstructed key: ' + error.message 
+      });
+    }
+
     res.json({ 
       success: true, 
       message: 'Private key stored securely',
@@ -327,6 +368,19 @@ app.delete('/api/dkg/private-key/:electionId',
     }
 
     privateKeys.delete(electionId);
+    
+    try {
+      persistKeys();
+    } catch (error) {
+      logger.error('Failed to persist keys after deletion', { 
+        electionId, 
+        error: error.message 
+      });
+      return res.status(500).json({ 
+        error: 'Failed to delete key: ' + error.message 
+      });
+    }
+    
     logger.info('Private key deleted', { electionId });
 
     res.json({ success: true, message: 'Private key deleted' });
@@ -745,7 +799,7 @@ app.get('/api/admin/keys', (req, res) => {
     keyList.push({
       electionId,
       createdAt: data.createdAt,
-      keyBits: data.publicKey.p.toString(2).length,
+      keyBits: data.publicKey?.p?.toString(2).length || 0,
       hasPrivateKey: true
     });
   }
@@ -753,6 +807,49 @@ app.get('/api/admin/keys', (req, res) => {
   res.json({
     count: keyList.length,
     keys: keyList
+  });
+});
+
+/**
+ * GET /api/admin/contract
+ * Get current contract address
+ */
+app.get('/api/admin/contract', (req, res) => {
+  res.json({
+    success: true,
+    contractAddress: CONTRACT_ADDRESS,
+    isConfigured: !!CONTRACT_ADDRESS
+  });
+});
+
+/**
+ * DELETE /api/admin/wipe
+ * Wipe all private keys for current contract
+ */
+app.delete('/api/admin/wipe', (req, res) => {
+  if (!CONTRACT_ADDRESS) {
+    return res.status(400).json({ error: 'No contract address configured' });
+  }
+
+  const wiped = wipePrivateKeys(CONTRACT_ADDRESS);
+  privateKeys.clear();
+
+  res.json({
+    success: true,
+    contractAddress: CONTRACT_ADDRESS,
+    message: wiped ? 'All keys wiped' : 'No keys found'
+  });
+});
+
+/**
+ * GET /api/admin/storage-stats
+ * Get storage statistics
+ */
+app.get('/api/admin/storage-stats', (req, res) => {
+  const stats = getCryptoStorageStats();
+  res.json({
+    success: true,
+    ...stats
   });
 });
 

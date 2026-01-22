@@ -18,10 +18,13 @@ import {
   thresholdDecrypt,
   finalizeCeremony,
   listCeremonies,
-  getShardsByElectionId
+  getShardsByElectionId,
+  setContractAddress,
+  getCurrentContractAddress
 } from './dkg-ceremony.js';
 import { testDKG } from './threshold-crypto.js';
 import { homomorphicTally } from './homomorphic-tally.js';
+import { wipeCeremonies, getStorageStats } from './storage.js';
 
 dotenv.config();
 
@@ -32,6 +35,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3003;
+
+// Load contract address from environment
+const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
+if (CONTRACT_ADDRESS) {
+  setContractAddress(CONTRACT_ADDRESS);
+  console.log(`📋 Contract address loaded: ${CONTRACT_ADDRESS}`);
+} else {
+  console.warn('⚠️  No CONTRACT_ADDRESS set in .env - ceremonies will not persist correctly');
+}
 
 // Middleware
 app.use(cors());
@@ -63,6 +75,15 @@ app.get('/health', (req, res) => {
  */
 app.post('/dkg/setup', (req, res) => {
   try {
+    // Ensure contract address is set
+    if (!getCurrentContractAddress()) {
+      if (CONTRACT_ADDRESS) {
+        setContractAddress(CONTRACT_ADDRESS);
+      } else {
+        return res.status(500).json({ error: 'Contract address not configured' });
+      }
+    }
+    
     const { electionId, threshold = 3, shares = 5, shareholderIds = [] } = req.body;
     
     if (!electionId) {
@@ -568,6 +589,107 @@ app.get('/test/dkg', (req, res) => {
     });
   } catch (error) {
     console.error('Test error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get current contract address
+ * GET /contract/current
+ */
+app.get('/contract/current', (req, res) => {
+  const current = getCurrentContractAddress();
+  res.json({
+    success: true,
+    contractAddress: current,
+    isConfigured: !!current
+  });
+});
+
+/**
+ * Switch to a different contract address
+ * POST /contract/switch
+ * Body: { contractAddress }
+ */
+app.post('/contract/switch', (req, res) => {
+  try {
+    const { contractAddress } = req.body;
+    
+    if (!contractAddress) {
+      return res.status(400).json({ error: 'contractAddress is required' });
+    }
+    
+    setContractAddress(contractAddress);
+    
+    res.json({
+      success: true,
+      contractAddress,
+      message: `Switched to contract ${contractAddress}`
+    });
+  } catch (error) {
+    console.error('Switch contract error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Wipe all data for current contract
+ * DELETE /contract/wipe
+ */
+app.delete('/contract/wipe', (req, res) => {
+  try {
+    const current = getCurrentContractAddress();
+    
+    if (!current) {
+      return res.status(400).json({ error: 'No contract address set' });
+    }
+    
+    const wiped = wipeCeremonies(current);
+    
+    if (wiped) {
+      // Reload empty state
+      setContractAddress(current);
+      
+      res.json({
+        success: true,
+        contractAddress: current,
+        message: `Wiped all DKG data for contract ${current}`
+      });
+    } else {
+      res.json({
+        success: true,
+        contractAddress: current,
+        message: 'No data found to wipe'
+      });
+    }
+  } catch (error) {
+    console.error('Wipe contract error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get storage statistics
+ * GET /storage/stats
+ */
+app.get('/storage/stats', (req, res) => {
+  try {
+    const stats = getStorageStats();
+    res.json({
+      success: true,
+      ...stats
+    });
+  } catch (error) {
+    console.error('Storage stats error:', error);
     res.status(500).json({
       success: false,
       error: error.message
