@@ -147,12 +147,6 @@ export function PublishResultsModal({ electionId, onClose, onSuccess }: PublishR
 
           {step === 'input' && (
             <div className="space-y-6">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>You have:</strong> Decrypted the encrypted votes and counted the final tally for each candidate. Now submit these results to finalize the election.
-                </p>
-              </div>
-
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">Candidate Results</h3>

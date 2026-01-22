@@ -141,13 +141,6 @@ export function AddVotersModal({ electionId, electionName, onClose, onSuccess }:
               </p>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                💡 <strong>Tip:</strong> You can add voters in batches. Call this multiple times if needed.
-                Gas cost scales with the number of addresses (~500k per address).
-              </p>
-            </div>
-
             <div className="flex gap-3 pt-4">
               <button
                 type="button"

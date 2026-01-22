@@ -190,24 +190,10 @@ export function EndElectionModal({ election, onClose, onSuccess }: EndElectionMo
                   <div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Status</p>
                     <p className="text-sm font-semibold">
-                      {electionEnded ? '🔒 Closed' : '🔴 Open'}
+                      {electionEnded ? '🔒 Closed' : '🟢 Open'}
                     </p>
                   </div>
                 </div>
-              </div>
-
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
-                  <strong>Next Steps:</strong>
-                </p>
-                <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-                  <li>End the election below</li>
-                  <li>Retrieve all encrypted votes</li>
-                  <li>Send encrypted votes to trustees for decryption</li>
-                  <li>Collect decryption shares from 3+ of 5 trustees</li>
-                  <li>Combine shares and decrypt vote tally</li>
-                  <li>Submit final results to the contract</li>
-                </ol>
               </div>
 
               <div className="flex gap-3">
@@ -226,13 +212,6 @@ export function EndElectionModal({ election, onClose, onSuccess }: EndElectionMo
                     {isLoading ? 'Processing...' : 'Force End Now'}
                   </button>
                 )}
-                <button
-                  onClick={() => handleEndElection(false)}
-                  disabled={isLoading}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  {isLoading ? 'Processing...' : 'End Election'}
-                </button>
               </div>
             </div>
           )}

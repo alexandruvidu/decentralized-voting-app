@@ -390,17 +390,6 @@ export default function DKGPage() {
           )}
         </div>
       </div>
-
-      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-        <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">ℹ️ How it works</h3>
-        <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1 list-disc list-inside">
-          <li>Click "Generate Keys" to create threshold encryption keys for an election</li>
-          <li>The DKG service generates a public key (p, g, h) for ElGamal encryption</li>
-          <li>You'll be prompted to sign a transaction to store the public key on the blockchain</li>
-          <li>Voters will automatically encrypt their votes using this public key</li>
-          <li>Votes can only be decrypted using threshold decryption after the election ends</li>
-        </ul>
-      </div>
     </div>
   );
 }
