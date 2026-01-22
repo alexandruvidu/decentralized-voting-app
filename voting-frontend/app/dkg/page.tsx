@@ -197,7 +197,7 @@ export default function DKGPage() {
     setGeneratingFor(electionId);
 
     try {
-      const response = await fetch(`${DKG_SERVICE_URL}/dkg/public-key/${electionId}`);
+      const response = await fetch(`${DKG_SERVICE_URL}/dkg/public-key/${electionId}?autocreate=true`);
       const data = await response.json();
 
       if (!data.success || !data.publicKey) {

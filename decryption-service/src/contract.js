@@ -17,7 +17,7 @@ const API_ENDPOINTS = {
 
 const NETWORK = process.env.MULTIVERSX_NETWORK || 'devnet';
 const API_URL = API_ENDPOINTS[NETWORK];
-const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || 'erd1qqqqqqqqqqqqqpgqxn4yzxryka9l8jex4vrgh0nv9nlwmsyhv8mseqf8c3';
+const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || 'erd1qqqqqqqqqqqqqpgq6wlngcy2vdj5n52azje36w08n8n35tu9v8msgx3w29';
 
 /**
  * Query smart contract view function

@@ -48,6 +48,7 @@ pub trait VotingApp {
         self.require_organizer();
         require!(!name.is_empty(), "Election name cannot be empty");
         require!(start_time < end_time, "Start time must be before end time");
+        require!(candidates.len() > 0, "Election must have at least one candidate");
         
         let current_timestamp = self.blockchain().get_block_timestamp();
         require!(start_time >= current_timestamp, "Election start time cannot be in the past");
@@ -94,6 +95,7 @@ pub trait VotingApp {
         require!(!name.is_empty(), "Election name cannot be empty");
         require!(start_time < end_time, "Start time must be before end time");
         require!(merkle_root.len() == 32, "Merkle root must be 32 bytes (keccak256)");
+        require!(candidates.len() > 0, "Election must have at least one candidate");
 
         let current_timestamp = self.blockchain().get_block_timestamp();
         require!(start_time >= current_timestamp, "Election start time cannot be in the past");

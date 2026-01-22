@@ -215,13 +215,22 @@ app.get('/dkg/ceremony/:ceremonyId', (req, res) => {
 app.get('/dkg/public-key/:electionId', (req, res) => {
   try {
     const { electionId } = req.params;
+    const { autocreate } = req.query;
     
     // Try to find existing ceremony for this election
     let ceremonies = listCeremonies();
     let ceremony = ceremonies.find(c => c.electionId === electionId);
     
-    // If no ceremony exists, create one automatically
-    if (!ceremony) {
+    // Only auto-create when explicitly requested
+    const shouldAutocreate = autocreate === 'true';
+    if (!ceremony && !shouldAutocreate) {
+      return res.status(404).json({
+        success: false,
+        error: `No DKG ceremony found for election ${electionId}. Call with ?autocreate=true to generate.`
+      });
+    }
+
+    if (!ceremony && shouldAutocreate) {
       console.log(`🔄 Auto-creating DKG ceremony for election ${electionId}`);
       ceremony = setupCeremony({
         electionId,
@@ -339,7 +348,7 @@ app.post('/dkg/store-keys/:electionId', async (req, res) => {
     const abiJson = JSON.parse(fs.readFileSync(abiPath, 'utf8'));
     const abi = AbiRegistry.create(abiJson);
     
-    const contractAddress = process.env.CONTRACT_ADDRESS || 'erd1qqqqqqqqqqqqqpgqxn4yzxryka9l8jex4vrgh0nv9nlwmsyhv8mseqf8c3';
+    const contractAddress = process.env.CONTRACT_ADDRESS || 'erd1qqqqqqqqqqqqqpgqf2dn5uhm65wmh9gzeekz0hcd20sr8mccv8ms6kqk85';
     
     // Create transaction factory
     const factory = new SmartContractTransactionsFactory({
